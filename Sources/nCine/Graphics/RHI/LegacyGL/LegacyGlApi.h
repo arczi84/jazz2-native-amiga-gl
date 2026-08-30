@@ -20,7 +20,15 @@
 // API of its own, which is why the documentation does not list it
 #if !defined(DOXYGEN_GENERATING_OUTPUT)
 
-#if defined(DEATH_TARGET_AMIGAOS4)
+#if defined(AMIGA_SHARED_MINIGL)
+	// Classic 68k Amiga: MiniGL v12 (PiStorm3D SDK). Its `glXxx` names are macros that dispatch
+	// through the library base MiniGLOpen() fills in, so `proto/minigl.h` has to be included -
+	// libminigl_dispatch.a exports the base, not the entry points. As on AmigaOS 4 no `<glext.h>`
+	// is pulled in: the enumerant fallbacks at the bottom of this file supply what MiniGL's own
+	// header leaves out (GL_COMBINE among them), and a declaration that cannot link is worse.
+#	include <proto/minigl.h>
+#	include <mgl/gl.h>
+#elif defined(DEATH_TARGET_AMIGAOS4)
 	// AmigaOS 4 reaches Warp3D through MiniGL, whose headers are the system ones - which is also what
 	// the SDK's own SDL_opengl.h includes on this platform. `<GL/glext.h>` is deliberately NOT included:
 	// it declares entry points MiniGL does not export (the framebuffer objects among them), and a
@@ -58,6 +66,21 @@
 #if !defined(GL_CLAMP_TO_EDGE)
 #	define GL_CLAMP_TO_EDGE 0x812F
 #endif
+#if defined(AMIGA_SHARED_MINIGL)
+// MiniGL v12's header stops short of a few plain GL 1.1 names the backend uses. The values are the
+// standard ones; glInterleavedArrays is exported under MiniGL's own capitalised name, so it is
+// reached through that rather than declared here.
+#	if !defined(GL_TEXTURE)
+#		define GL_TEXTURE 0x1702
+#	endif
+#	if !defined(GL_LIGHTING)
+#		define GL_LIGHTING 0x0B50
+#	endif
+#	if !defined(GL_STENCIL_BUFFER_BIT)
+#		define GL_STENCIL_BUFFER_BIT 0x00000400
+#	endif
+#endif
+
 #if !defined(GL_COMBINE)
 #	define GL_COMBINE 0x8570
 #	define GL_COMBINE_RGB 0x8571
@@ -106,7 +129,7 @@
 // LegacyGlRenderTarget). Everywhere else they are declared, but still not assumed to WORK: TinyGL
 // declares them unconditionally and the running library may answer nothing, so the backend probes them
 // at run time as well (`LegacyGlDevice::SupportsFramebufferObjects()`).
-#if !defined(DEATH_TARGET_AMIGAOS4)
+#if !defined(DEATH_TARGET_AMIGAOS4) && !defined(AMIGA_SHARED_MINIGL)
 #	define RHI_LEGACYGL_HAS_FBO
 #	if !defined(GL_FRAMEBUFFER)
 #		define GL_FRAMEBUFFER 0x8D40

@@ -135,7 +135,7 @@ namespace Jazz2::Actors::Solid
 				} else if (right <= foundX[i]) {
 					height = _rightHeight;
 				} else {
-					height = lerp(_leftHeight, _rightHeight, (foundX[i] - left) / (right - left));
+					height = nCine::lerp(_leftHeight, _rightHeight, (foundX[i] - left) / (right - left));
 				}
 
 				auto* player = foundPlayers[i];
@@ -208,7 +208,7 @@ namespace Jazz2::Actors::Solid
 		} else if (rightX < widthCovered) {
 			return (_bridgeWidth > rightX ? rightHeight * sinf(fPiOver2 * (_bridgeWidth - widthCovered) / (_bridgeWidth - rightX)) : rightHeight);
 		} else {
-			return (rightX > leftX ? lerp(leftHeight, rightHeight, (widthCovered - leftX) / (rightX - leftX)) : leftHeight);
+			return (rightX > leftX ? nCine::lerp(leftHeight, rightHeight, (widthCovered - leftX) / (rightX - leftX)) : leftHeight);
 		}
 	}
 

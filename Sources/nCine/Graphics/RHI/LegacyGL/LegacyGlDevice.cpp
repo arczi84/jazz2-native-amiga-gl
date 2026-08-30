@@ -363,6 +363,7 @@ namespace nCine::RHI::LegacyGL
 				} else {
 					glEnable(GL_TEXTURE_2D);
 					glBindTexture(GL_TEXTURE_2D, state.Texture);
+#if !defined(AMIGA_SHARED_MINIGL)
 					// The submission code emits texel coordinates (the console backends' "through mode"
 					// convention); one texture matrix per binding is what turns them into GL's normalized
 					// range, so no per-vertex division is needed anywhere
@@ -372,6 +373,7 @@ namespace nCine::RHI::LegacyGL
 						glScalef(1.0f / float(state.TextureWidth), 1.0f / float(state.TextureHeight), 1.0f);
 					}
 					glMatrixMode(GL_MODELVIEW);
+#endif
 				}
 			}
 			if (state.Texture != 0 && (textureChanged || appliedState.Env != state.Env ||
@@ -409,7 +411,34 @@ namespace nCine::RHI::LegacyGL
 			ApplyDrawState(batchState);
 			const std::uint8_t* const base = frameArena + batchFirstByte;
 			// GL_T2F_C4UB_V3F is Vertex2D's layout exactly, so the interleaved array IS the batch
+#if defined(AMIGA_SHARED_MINIGL)
+			// MiniGL v12's dispatch has no glInterleavedArrays, so the same layout is described with
+			// the three pointers it does export. GL_T2F_C4UB_V3F is 24 bytes: 2 floats of texture
+			// coordinate, 4 unsigned bytes of colour, then 3 floats of position.
+			{
+				// The three arrays are enabled once per context in InitializeGl(), not here: they are
+				// global state and re-enabling them per batch costs three dispatched calls a batch
+				constexpr GLsizei Stride = 24;
+				// MiniGL has no GL_TEXTURE matrix (its glMatrixMode takes MODELVIEW and PROJECTION and
+				// nothing else), so the scale ApplyDrawState would have programmed there is applied to
+				// the batch itself: the submission code emits texel indices, and these are the vertices
+				// that carry them. Done once per batch over its own vertices, in place.
+				if (batchState.Texture != 0 && batchState.TextureWidth > 0 && batchState.TextureHeight > 0) {
+					const float invW = 1.0f / float(batchState.TextureWidth);
+					const float invH = 1.0f / float(batchState.TextureHeight);
+					Vertex2D* v = reinterpret_cast<Vertex2D*>(frameArena + batchFirstByte);
+					for (std::int32_t i = 0; i < batchVertexCount; i++) {
+						v[i].U *= invW;
+						v[i].V *= invH;
+					}
+				}
+				glTexCoordPointer(2, GL_FLOAT, Stride, base);
+				glColorPointer(4, GL_UNSIGNED_BYTE, Stride, base + 8);
+				glVertexPointer(3, GL_FLOAT, Stride, base + 12);
+			}
+#else
 			glInterleavedArrays(GL_T2F_C4UB_V3F, 0, base);
+#endif
 			glDrawArrays(batchState.Prim, 0, batchVertexCount);
 			frameDrawCalls++;
 			frameVertices += std::uint32_t(batchVertexCount);
@@ -899,6 +928,14 @@ namespace nCine::RHI::LegacyGL
 		glDepthMask(GL_FALSE);
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_LIGHTING);
+#if defined(AMIGA_SHARED_MINIGL)
+		// Every batch this backend submits is the same GL_T2F_C4UB_V3F layout, described with the three
+		// pointer calls MiniGL exports in place of glInterleavedArrays - so the arrays they feed are
+		// enabled here once rather than per batch
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glEnableClientState(GL_COLOR_ARRAY);
+		glEnableClientState(GL_VERTEX_ARRAY);
+#endif
 		glDisable(GL_FOG);
 		glDisable(GL_ALPHA_TEST);
 		glShadeModel(GL_SMOOTH);
@@ -1578,9 +1615,12 @@ namespace nCine::RHI::LegacyGL
 			// multiply-only approximation shared with the GX and PVR backends), as an RGBA8 texture drawn
 			// over the viewport with a dst * src blend. The texels go into the frame arena, which is
 			// exactly the lifetime they need - the upload copies them and they are gone at present.
+			// The doubling has to stop AT the device maximum, not one step past it: testing the value
+			// before it is doubled lets a lightmap one texel wider than the limit ask for twice it,
+			// which is a size the driver cannot make (MiniGL over Warp3D reports 256 here)
 			std::int32_t texW = 8, texH = 8;
-			while (texW < light.LmW && texW < LegacyGlTexture::MaxPageDimension) texW <<= 1;
-			while (texH < light.LmH && texH < LegacyGlTexture::MaxPageDimension) texH <<= 1;
+			while (texW < light.LmW && (texW << 1) <= LegacyGlTexture::MaxPageDimension) texW <<= 1;
+			while (texH < light.LmH && (texH << 1) <= LegacyGlTexture::MaxPageDimension) texH <<= 1;
 			// One texture page is the whole store here, so a lightmap larger than that (a viewport wider
 			// than twice MaxPageDimension) has more texels than were allocated. What fits is copied and
 			// then stretched over the whole viewport by the quad below - the alternative is writing past
@@ -1590,27 +1630,37 @@ namespace nCine::RHI::LegacyGL
 			const std::size_t size = std::size_t(texW) * std::size_t(texH) * 4;
 			std::uint32_t* const surface = static_cast<std::uint32_t*>(AllocFrameData(size, 4));
 			if (surface != nullptr) {
+				// The texel a pair of lightmap channels produces depends on nothing else for the whole
+				// composite - the ambient is one colour per light. Quantising r and g to 32 steps each
+				// makes that a 1024-entry table built once here, which turns the inner loop into two
+				// float-to-index conversions and a load; the alternative is six multiplies, three
+				// clamps and three float-to-byte conversions on every texel of the viewport.
+				constexpr std::int32_t FactorSteps = 32;
+				std::uint32_t factorTable[FactorSteps * FactorSteps];
+				for (std::int32_t ri = 0; ri < FactorSteps; ri++) {
+					const float r = float(ri) / float(FactorSteps - 1);
+					for (std::int32_t gi = 0; gi < FactorSteps; gi++) {
+						const float g = float(gi) / float(FactorSteps - 1);
+						factorTable[ri * FactorSteps + gi] = PackRgbaBytes(
+							QuantizeChannel(LightingCombineFactor(r, g, light.AmbR)),
+							QuantizeChannel(LightingCombineFactor(r, g, light.AmbG)),
+							QuantizeChannel(LightingCombineFactor(r, g, light.AmbB)), 255);
+					}
+				}
+				constexpr float FactorScale = float(FactorSteps - 1);
+
 				for (std::int32_t y = 0; y < copyH; y++) {
 					const float* DEATH_RESTRICT src = light.Lightmap + std::size_t(y) * light.LmW * 2;
 					std::uint32_t* DEATH_RESTRICT dst = surface + std::size_t(y) * texW;
 					// Unlit runs repeat the same pair of factors across long spans, so remembering the last
 					// converted texel turns most of the surface into a compare and a store
-					float prevR = -1.0f, prevG = -1.0f;
-					std::uint32_t prevTexel = 0;
+					std::uint32_t prevTexel = factorTable[0];
 					for (std::int32_t x = 0; x < copyW; x++) {
-						const float rawR = src[x * 2];
-						const float rawG = src[x * 2 + 1];
-						if (rawR == prevR && rawG == prevG) {
-							dst[x] = prevTexel;
-							continue;
-						}
-						prevR = rawR;
-						prevG = rawG;
-						const float r = ClampLightmapChannel(rawR);
-						const float g = ClampLightmapChannel(rawG);
-						prevTexel = PackRgbaBytes(QuantizeChannel(LightingCombineFactor(r, g, light.AmbR)),
-							QuantizeChannel(LightingCombineFactor(r, g, light.AmbG)),
-							QuantizeChannel(LightingCombineFactor(r, g, light.AmbB)), 255);
+						const float r = ClampLightmapChannel(src[x * 2]);
+						const float g = ClampLightmapChannel(src[x * 2 + 1]);
+						const std::int32_t ri = std::int32_t(r * FactorScale + 0.5f);
+						const std::int32_t gi = std::int32_t(g * FactorScale + 0.5f);
+						prevTexel = factorTable[ri * FactorSteps + gi];
 						dst[x] = prevTexel;
 					}
 					// The padding columns are reached by the bilinear tap at the last texel

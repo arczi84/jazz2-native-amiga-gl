@@ -1,6 +1,10 @@
 #if defined(WITH_AMIGA)
 
 #include "AmigaInputManager.h"
+
+#if defined(WITH_RHI_LEGACYGL)
+#	include <SDL.h>
+#endif
 #include "AmigaPlatform.h"
 #include "../../Input/JoyMapping.h"
 #include "../../Input/IInputEventHandler.h"
@@ -336,6 +340,45 @@ namespace nCine::Backends
 
 	void AmigaInputManager::processIdcmpMessages()
 	{
+#if defined(WITH_RHI_LEGACYGL)
+		// The GL path has no Intuition window of its own - SDL owns the one MiniGL draws into (see
+		// AmigaGfxDevice::openDisplay), so the events come from SDL's queue instead of an IDCMP port.
+		// SDL 1.2 already reports keys as Amiga rawkey codes, which is what RawKeyMap is indexed by.
+		{
+			SDL_Event event;
+			while (SDL_PollEvent(&event)) {
+				switch (event.type) {
+					case SDL_KEYDOWN:
+					case SDL_KEYUP: {
+						const bool released = (event.type == SDL_KEYUP);
+						const std::int32_t rawKey = event.key.keysym.scancode;
+						if (rawKey < 0 || rawKey >= MaxRawKey) {
+							break;
+						}
+						const Keys sym = RawKeyMap[rawKey];
+						if (sym == Keys::Unknown) {
+							break;
+						}
+						const bool wasDown = _keyboardState._keys[std::int32_t(sym)];
+						_keyboardState._keys[std::int32_t(sym)] = !released;
+						if (_inputEventHandler != nullptr) {
+							_keyboardEvent.scancode = rawKey;
+							_keyboardEvent.sym = sym;
+							_keyboardEvent.mod = 0;
+							if (released) {
+								_inputEventHandler->OnKeyReleased(_keyboardEvent);
+							} else if (!wasDown) {
+								_inputEventHandler->OnKeyPressed(_keyboardEvent);
+							}
+						}
+						break;
+					}
+					// SDL_QUIT is left to the window backend, which owns the shutdown path
+				}
+			}
+		}
+		return;
+#else
 		struct Window* window = AmigaPlatform::GameWindow;
 		if (window == nullptr || window->UserPort == nullptr) {
 			return;
@@ -462,10 +505,10 @@ namespace nCine::Backends
 					_mouseState.y = mouseY;
 					if (_inputEventHandler != nullptr) {
 						_inputEventHandler->OnMouseMove(_mouseState);
-					}
 					break;
 			}
 		}
+#endif
 	}
 
 	void AmigaInputManager::pollJoyPorts()

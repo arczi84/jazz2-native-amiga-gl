@@ -2182,7 +2182,7 @@ namespace Jazz2::Actors
 
 			_levelHandler->PlayerExecuteRumble(this, "Spring"_s);
 		} else if (std::abs(force.Y) > 0.0f) {
-			MoveInstantly(Vector2f(lerp(_pos.X, pos.X, 0.3f), _pos.Y), MoveType::Absolute);
+			MoveInstantly(Vector2f(nCine::lerp(_pos.X, pos.X, 0.3f), _pos.Y), MoveType::Absolute);
 
 			if (_activeModifier == Modifier::None && _copterFramesLeft > 0.0f) {
 				_copterFramesLeft = 0.0f;

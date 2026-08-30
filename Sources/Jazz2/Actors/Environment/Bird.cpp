@@ -97,8 +97,8 @@ namespace Jazz2::Actors::Environment
 				_fireCooldown = 40.0f;
 			}
 
-			targetPos.X = lerp(_pos.X, targetPos.X, 0.02f * timeMult);
-			targetPos.Y = lerp(_pos.Y, targetPos.Y, 0.02f * timeMult);
+			targetPos.X = nCine::lerp(_pos.X, targetPos.X, 0.02f * timeMult);
+			targetPos.Y = nCine::lerp(_pos.Y, targetPos.Y, 0.02f * timeMult);
 			MoveInstantly(targetPos, MoveType::Absolute | MoveType::Force);
 		}
 

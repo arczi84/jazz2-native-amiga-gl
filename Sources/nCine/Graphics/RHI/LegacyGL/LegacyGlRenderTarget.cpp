@@ -1,4 +1,6 @@
 #include "LegacyGlRenderTarget.h"
+
+#include <memory>
 #include "LegacyGlApi.h"
 #include "LegacyGlDevice.h"
 #include "LegacyGlTexture.h"
@@ -104,7 +106,19 @@ namespace nCine::RHI::LegacyGL
 			return;
 		}
 		glBindTexture(GL_TEXTURE_2D, name);
+#if defined(AMIGA_SHARED_MINIGL)
+		// MiniGL v12 exports no glCopyTexSubImage2D, so the region goes through main memory:
+		// read the back buffer's rows back and hand them to glTexSubImage2D. Both calls agree on
+		// GL_RGBA/GL_UNSIGNED_BYTE, the one format combination MiniGL takes for either direction.
+		{
+			const std::size_t pixels = std::size_t(width) * std::size_t(height);
+			std::unique_ptr<std::uint8_t[]> scratch = std::make_unique<std::uint8_t[]>(pixels * 4);
+			glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, scratch.get());
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, scratch.get());
+		}
+#else
 		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+#endif
 		LegacyGlDevice::InvalidateStateCache();
 	}
 

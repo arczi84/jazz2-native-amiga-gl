@@ -23,8 +23,10 @@ namespace nCine::RHI::LegacyGL
 			if (LegacyGlDevice::SupportsNonPowerOfTwo()) {
 				return value;
 			}
+			// Stop AT the maximum: testing before the doubling lets a value one texel over the limit
+			// round up to twice it, which is a size the device just said it cannot make
 			std::int32_t result = 1;
-			while (result < value && result < LegacyGlTexture::MaxPageDimension) {
+			while (result < value && (result << 1) <= LegacyGlTexture::MaxPageDimension) {
 				result <<= 1;
 			}
 			return result;
@@ -258,6 +260,7 @@ namespace nCine::RHI::LegacyGL
 				row[x * 4 + 3] = std::uint8_t(alpha);
 				src += _bytesPerPixel;
 			}
+
 			for (std::int32_t x = page.Width; x < rowTexels; x++) {
 				std::memcpy(row + std::size_t(x) * 4, row + std::size_t(page.Width - 1) * 4, 4);
 			}
@@ -284,7 +287,10 @@ namespace nCine::RHI::LegacyGL
 		}
 		glBindTexture(GL_TEXTURE_2D, page.GlTexture);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-		// The store is exactly the texture: padded to a power of two, RGBA8, one page per object
+		// The store is exactly the texture: padded to a power of two, RGBA8, one page per object.
+		// Deliberately NOT bracketed by glGetError(): that call has to synchronise with the driver,
+		// and a level change uploads hundreds of pages in a row - the two error queries this upload
+		// would otherwise make are two pipeline flushes each time.
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, page.PaddedWidth, page.PaddedHeight, 0,
 			GL_RGBA, GL_UNSIGNED_BYTE, page.Data);
 		// Filters and wrapping are per-draw state (the device sets them from the material), but a texture

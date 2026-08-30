@@ -197,7 +197,7 @@ namespace nCine
 			if (_maxFrameTime < maxFrameTime) {
 				_maxFrameTime = maxFrameTime;
 			} else {
-				_maxFrameTime = lerp(_maxFrameTime, maxFrameTime, 0.2f);
+				_maxFrameTime = nCine::lerp(_maxFrameTime, maxFrameTime, 0.2f);
 			}
 
 #if defined(NCINE_PROFILING)
@@ -208,7 +208,7 @@ namespace nCine
 			if (_maxUpdateVisitDraw < maxUpdateVisitDraw) {
 				_maxUpdateVisitDraw = maxUpdateVisitDraw;
 			} else {
-				_maxUpdateVisitDraw = lerp(_maxUpdateVisitDraw, maxUpdateVisitDraw, 0.2f);
+				_maxUpdateVisitDraw = nCine::lerp(_maxUpdateVisitDraw, maxUpdateVisitDraw, 0.2f);
 			}
 
 			if (appCfg.withScenegraph) {

@@ -76,6 +76,8 @@ namespace Jazz2
 #else
 	std::uint8_t PreferencesCache::LightingResolutionPercent = 100;
 #endif
+	std::int32_t PreferencesCache::PreferredWidth = 0;
+	std::int32_t PreferencesCache::PreferredHeight = 0;
 	bool PreferencesCache::EnableReforgedGameplay = true;
 	bool PreferencesCache::EnableReforgedHUD = true;
 	bool PreferencesCache::EnableReforgedMainMenu = true;
@@ -1369,6 +1371,13 @@ namespace
 						PlayerFurColor = uc.ReadValueAsLE<std::uint32_t>();
 						PlayerColors = (PlayerColorMode)uc.ReadValue<std::uint8_t>();
 					}
+
+					if (version >= 16) {
+						// The size the window backend should open with, where it can choose one (the classic
+						// Amiga GL path does); 0x0 means "decide as before"
+						PreferredWidth = std::int32_t(uc.ReadValueAsLE<std::uint16_t>());
+						PreferredHeight = std::int32_t(uc.ReadValueAsLE<std::uint16_t>());
+					}
 				} else {
 					// The file is too new or corrupted
 					resetConfig = true;
@@ -1609,6 +1618,10 @@ namespace
 		// Player character recolor and recolor scope (v15+)
 		co.WriteValueAsLE<std::uint32_t>(PlayerFurColor);
 		co.WriteValue<std::uint8_t>((std::uint8_t)PlayerColors);
+
+		// v16: the window size to open with next time (0x0 = let the backend decide)
+		co.WriteValueAsLE<std::uint16_t>(std::uint16_t(std::clamp(PreferredWidth, std::int32_t(0), std::int32_t(65535))));
+		co.WriteValueAsLE<std::uint16_t>(std::uint16_t(std::clamp(PreferredHeight, std::int32_t(0), std::int32_t(65535))));
 
 		co.Dispose();
 		so->Dispose();

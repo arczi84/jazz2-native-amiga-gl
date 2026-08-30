@@ -119,7 +119,20 @@ namespace nCine
 				_renderCommand.GetMaterial().SetBlendingFactors(BlendingFactor::One, BlendingFactor::OneMinusSrcAlpha);
 				break;
 			case BlendingPreset::Additive:
+#if defined(WITH_AMIGA) && defined(NCINE_NO_ADDITIVE_BLEND)
+				// MiniGL/Warp3D on PiStorm takes SrcAlpha,One through a path that costs far more per
+				// pixel than the alpha blend every other draw uses - a handful of projectiles on screen
+				// is enough to halve the frame rate. Glows lose their additive light and blend instead,
+				// which is visibly wrong; this is the measurement, not the fix.
+				_renderCommand.GetMaterial().SetBlendingFactors(BlendingFactor::SrcAlpha, BlendingFactor::OneMinusSrcAlpha);
+#elif defined(WITH_AMIGA) && defined(NCINE_ADDITIVE_ONE_ONE)
+				// The same additive result for a source that is already premultiplied - and one factor
+				// fewer for the driver to apply per pixel, which is worth measuring separately where
+				// SrcAlpha,One is the slow path
+				_renderCommand.GetMaterial().SetBlendingFactors(BlendingFactor::One, BlendingFactor::One);
+#else
 				_renderCommand.GetMaterial().SetBlendingFactors(BlendingFactor::SrcAlpha, BlendingFactor::One);
+#endif
 				break;
 			case BlendingPreset::Multiply:
 				_renderCommand.GetMaterial().SetBlendingFactors(BlendingFactor::DstColor, BlendingFactor::Zero);

@@ -267,6 +267,10 @@ namespace Jazz2
 		static RescaleMode ActiveRescaleMode;
 		/** @brief Whether the application is running in fullscreen */
 		static bool EnableFullscreen;
+		/** @brief Window size the platform should open, 0 to let the backend choose (v16+) */
+		static std::int32_t PreferredWidth;
+		/** @brief Window height that goes with @ref PreferredWidth */
+		static std::int32_t PreferredHeight;
 		/** @brief Maximum frace rate */
 		static std::int32_t MaxFps;
 		/** @brief Whether performance metrics (FPS counter) are visible */
@@ -448,7 +452,7 @@ namespace Jazz2
 
 		DEATH_PRIVATE_ENUM_FLAGS(BoolOptions);
 
-		static constexpr std::uint8_t FileVersion = 15;
+		static constexpr std::uint8_t FileVersion = 16;
 
 		PreferencesCache(const PreferencesCache&) = delete;
 		PreferencesCache& operator=(const PreferencesCache&) = delete;

@@ -46,15 +46,49 @@ namespace Jazz2::UI::Menu
 		list->Add<ListItem>(_("Rescale Mode"), [root]() { root->SwitchToSection<RescaleModeSection>(); });
 #endif
 
-		// Display-only row (no OnChange): shows the current drawable resolution without arrows
 		// TRANSLATORS: Menu item in Options > Graphics section
-		list->Add<ChoiceItem>(_("Resolution"),
-			[this]() -> StringView {
-				Vector2i res = theApplication().GetGfxDevice().drawableResolution();
-				_resolutionValue = format("{}x{}", res.X, res.Y);
-				return _resolutionValue;
-			},
-			nullptr);
+		{
+			// Where the device reports more than one video mode, the row picks between them; where it
+			// reports one (a console, or a display the backend cannot change) it stays what it was -
+			// the current resolution, shown without arrows.
+			IGfxDevice& gfxDevice = theApplication().GetGfxDevice();
+			const bool canChoose = (gfxDevice.monitor(0).numVideoModes > 1);
+			list->Add<ChoiceItem>(_("Resolution"),
+				[this]() -> StringView {
+					Vector2i res = theApplication().GetGfxDevice().drawableResolution();
+					_resolutionValue = format("{}x{}", res.X, res.Y);
+					return _resolutionValue;
+				},
+				canChoose ? std::function<void(std::int32_t)>([this](std::int32_t direction) {
+					IGfxDevice& device = theApplication().GetGfxDevice();
+					const IGfxDevice::Monitor& monitor = device.monitor(0);
+					const std::int32_t count = monitor.numVideoModes;
+					const Vector2i current = device.drawableResolution();
+					// The modes are listed ascending, so the nearest one at or above the current size is
+					// where Left/Right starts from; clamped at both ends, no wraparound
+					std::int32_t index = count - 1;
+					for (std::int32_t i = 0; i < count; i++) {
+						const IGfxDevice::VideoMode& mode = monitor.videoModes[i];
+						if (std::int32_t(mode.width) >= current.X && std::int32_t(mode.height) >= current.Y) {
+							index = i;
+							break;
+						}
+					}
+					if (direction < 0) {
+						index = (index > 0 ? index - 1 : 0);
+					} else if (direction > 0) {
+						index = (index + 1 < count ? index + 1 : count - 1);
+					}
+					const IGfxDevice::VideoMode& picked = monitor.videoModes[index];
+					// Remembered for the next run as well as applied now: a backend that cannot resize
+					// its window in place (SDL 1.2 with MiniGL) still opens at this size next time
+					PreferencesCache::PreferredWidth = std::int32_t(picked.width);
+					PreferencesCache::PreferredHeight = std::int32_t(picked.height);
+					device.setResolution(PreferencesCache::EnableFullscreen,
+						std::int32_t(picked.width), std::int32_t(picked.height));
+					_isDirty = true;
+				}) : nullptr);
+		}
 
 #if defined(NCINE_HAS_WINDOWS)
 #	if defined(DEATH_TARGET_WINDOWS_RT)

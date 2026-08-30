@@ -63,8 +63,8 @@ namespace Jazz2::Actors::Enemies
 			_speed.X += _direction.X * 0.11f * timeMult;
 			_speed.Y += _direction.Y * 0.11f * timeMult;
 		} else if (_state == StateBraking) {
-			_speed.X = lerp(_speed.X, _speed.X * 0.96f, timeMult);
-			_speed.Y = lerp(_speed.Y, _speed.Y * 0.96f, timeMult);
+			_speed.X = nCine::lerp(_speed.X, _speed.X * 0.96f, timeMult);
+			_speed.Y = nCine::lerp(_speed.Y, _speed.Y * 0.96f, timeMult);
 
 			if (std::abs(_speed.X) < 0.01f && std::abs(_speed.Y) < 0.01f) {
 				_state = StateReturning;

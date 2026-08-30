@@ -162,9 +162,9 @@ if(NOT NCINE_BUILD_ANDROID AND NOT WINDOWS_PHONE AND NOT WINDOWS_STORE AND NOT N
 		# on has texturing or blending hardware - RTG cards accelerate at most blits and fills - so unlike
 		# the fixed-function consoles there is no hardware pipeline to drive: the Software RHI, which the
 		# desktop and Vita builds already ship, IS the renderer here (see Docs/AmigaPortDesign.md).
-		set(NCINE_PREFERRED_RHI "Software" CACHE STRING "Rendering backend on Amiga: Software")
-		set_property(CACHE NCINE_PREFERRED_RHI PROPERTY STRINGS "Software")
-		if(NOT NCINE_PREFERRED_RHI STREQUAL "Software")
+		set(NCINE_PREFERRED_RHI "Software" CACHE STRING "Rendering backend on Amiga: Software or LegacyGL")
+		set_property(CACHE NCINE_PREFERRED_RHI PROPERTY STRINGS "Software;LegacyGL")
+		if(NOT NCINE_PREFERRED_RHI MATCHES "^(Software|LegacyGL)$")
 			message(FATAL_ERROR "Invalid NCINE_PREFERRED_RHI \"${NCINE_PREFERRED_RHI}\" on Amiga (expected Software)")
 		endif()
 	elseif(PLATFORM_N64)

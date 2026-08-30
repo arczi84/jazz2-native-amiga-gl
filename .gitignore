@@ -367,3 +367,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Amiga cross-build trees and their logs
+build-*/
+*-build.log

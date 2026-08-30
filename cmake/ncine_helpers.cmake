@@ -575,7 +575,14 @@ function(ncine_apply_compiler_options target)
 		else()
 			target_compile_options(${target} PRIVATE "-fno-exceptions")
 		endif()
-		target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-ffast-math>)
+		# NCINE_SAFE_MATH keeps the strict IEEE behaviour: on a machine whose FPU is real but whose
+		# instruction timings are not the 68060's own (PiStorm/Emu68), a reordering the fast path is
+		# entitled to make is one more variable in a performance question
+		if(NCINE_SAFE_MATH)
+			target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-fno-fast-math>)
+		else()
+			target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-ffast-math>)
+		endif()
 
 		if(MINGW OR MSYS)
 			target_link_options(${target} PRIVATE "-municode")

@@ -9,6 +9,11 @@
 #include <cstdlib>
 #include <cstring>
 
+#if defined(AMIGA_SHARED_MINIGL)
+#	include <proto/minigl.h>
+#	include <clib/minigl_open_protos.h>
+#endif
+
 #include <exec/execbase.h>
 #include <exec/memory.h>
 #include <proto/exec.h>
@@ -103,6 +108,17 @@ namespace nCine::Backends
 			std::fprintf(stderr, "nCine: AmigaOS 3.0 (Kickstart 39) or newer is required\n");
 			return false;
 		}
+
+#if defined(AMIGA_SHARED_MINIGL)
+		// A LegacyGL build reaches Warp3D through minigl.library, whose call vectors live in the library
+		// itself: every `glXxx` in the backend dispatches through the base this call fills in, so nothing
+		// GL may run before it (an unopened base sends the first GL call through a null pointer).
+		if (!MiniGLOpen()) {
+			std::fprintf(stderr, "nCine: cannot open minigl.library (this build renders through MiniGL/Warp3D)\n");
+			return false;
+		}
+		LOGI("minigl.library opened");
+#endif
 
 		// The whole rendering path presents into an RTG chunky framebuffer through the CyberGraphX API,
 		// which Picasso96 implements as well - one code path covers both stacks (and SAGA, PiStorm and
@@ -200,6 +216,9 @@ namespace nCine::Backends
 
 	void AmigaPlatform::Shutdown()
 	{
+#if defined(AMIGA_SHARED_MINIGL)
+		MiniGLClose();
+#endif
 		// The timer is not closed here - see Environment::Implementation::QueryAmigaEClock(), which owns it
 		// and keeps it open for the lifetime of the process on purpose
 		if (KeymapBase != nullptr) {

@@ -908,7 +908,7 @@ namespace Jazz2::Multiplayer
 					}
 
 #if defined(DEATH_DEBUG)
-					_debugAverageUpdatePacketSize = lerp(_debugAverageUpdatePacketSize, (std::int32_t)(packet.GetSize() * UpdatesPerSecond), 0.04f * timeMult);
+					_debugAverageUpdatePacketSize = nCine::lerp(_debugAverageUpdatePacketSize, (std::int32_t)(packet.GetSize() * UpdatesPerSecond), 0.04f * timeMult);
 #endif
 #if defined(DEATH_DEBUG) && defined(WITH_IMGUI)
 					_updatePacketSize[_plotIndex] = packet.GetSize();
@@ -5061,7 +5061,7 @@ namespace Jazz2::Multiplayer
 		std::unique_lock lock(_lock);
 
 		_lastUpdated = now;
-		_elapsedFrames = lerp(_elapsedFrames, elapsedFrames + _networkManager->GetRoundTripTimeMs() * FrameTimer::FramesPerSecond * 0.002f, 0.05f);
+		_elapsedFrames = nCine::lerp(_elapsedFrames, elapsedFrames + _networkManager->GetRoundTripTimeMs() * FrameTimer::FramesPerSecond * 0.002f, 0.05f);
 
 		actorCount >>= 1;
 

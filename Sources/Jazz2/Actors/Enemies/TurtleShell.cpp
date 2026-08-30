@@ -99,7 +99,7 @@ namespace Jazz2::Actors::Enemies
 
 		if (_levelHandler->IsReforged()) {
 			// Enable tilting only if Reforged
-			_lastAngle = lerp(_lastAngle, _speed.X * 0.06f, timeMult * 0.2f);
+			_lastAngle = nCine::lerp(_lastAngle, _speed.X * 0.06f, timeMult * 0.2f);
 			_renderer.setRotation(_lastAngle);
 		}
 	}

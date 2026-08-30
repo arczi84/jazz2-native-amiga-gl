@@ -1,11 +1,19 @@
 #if defined(WITH_AMIGA)
 
 #include "AmigaGfxDevice.h"
+#include "../../Application.h"
 #include "AmigaPlatform.h"
 #include "../../Graphics/RHI/Rhi.h"
 #include "../../../Main.h"
 
 #include <cstring>
+
+#if defined(WITH_RHI_LEGACYGL)
+#	include <SDL.h>
+#	include "../../../Jazz2/PreferencesCache.h"
+#	include <proto/minigl.h>
+#	include <mgl/gl.h>
+#endif
 
 #include <exec/exec.h>
 #include <intuition/intuition.h>
@@ -76,17 +84,25 @@ namespace nCine::Backends
 		_currentVideoMode.width = std::uint32_t(_width);
 		_currentVideoMode.height = std::uint32_t(_height);
 		_currentVideoMode.refreshRate = 60.0f;
+#if defined(WITH_RHI_LEGACYGL)
+		_currentVideoMode.redBits = 8;
+		_currentVideoMode.greenBits = 8;
+		_currentVideoMode.blueBits = 8;
+#else
 		_currentVideoMode.redBits = 5;
 		_currentVideoMode.greenBits = 6;
 		_currentVideoMode.blueBits = 5;
+#endif
 
 		updateMonitors();
 		initDeviceViewport();
 
+#if !defined(WITH_RHI_LEGACYGL)
 		LOGI("Video mode initialized: {}x{} 16-bit RTG ({} preset)", _width, _height,
 			performanceClass == AmigaPlatform::PerformanceClass::Ultra ? "Ultra"
 				: performanceClass == AmigaPlatform::PerformanceClass::High ? "High"
 				: performanceClass == AmigaPlatform::PerformanceClass::Medium ? "Medium" : "Low");
+#endif
 	}
 
 	AmigaGfxDevice::~AmigaGfxDevice()
@@ -96,6 +112,51 @@ namespace nCine::Backends
 
 	bool AmigaGfxDevice::openDisplay(std::int32_t requestedWidth, std::int32_t requestedHeight)
 	{
+#if defined(WITH_RHI_LEGACYGL)
+		// MiniGL takes its drawing surface from the GL context SDL creates, so the screen is opened
+		// through SDL here rather than through Intuition: minigl.library attaches Warp3D to the window
+		// SDL_SetVideoMode() returns, and every GL call after that goes to it.
+		{
+			// The size picked in the options menu last time wins, since this backend cannot resize the
+			// window in place; anything the caller asked for comes next, then the smallest RTG default
+			std::int32_t width = requestedWidth;
+			std::int32_t height = requestedHeight;
+			if (Jazz2::PreferencesCache::PreferredWidth > 0 && Jazz2::PreferencesCache::PreferredHeight > 0) {
+				width = Jazz2::PreferencesCache::PreferredWidth;
+				height = Jazz2::PreferencesCache::PreferredHeight;
+			}
+			if (width <= 0 || height <= 0) {
+				width = 320;
+				height = 256;
+			}
+			if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+				LOGE("SDL_Init(SDL_INIT_VIDEO) failed: {}", SDL_GetError());
+				return false;
+			}
+			// The GL attributes have to be set BEFORE the mode is created - SDL 1.2 reads them there and
+			// nowhere else. Without the double-buffer request MiniGL renders and scans out of the same
+			// surface, which is what makes a frame visible while it is still being drawn.
+			SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+			SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+			SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+			if (SDL_SetVideoMode(width, height, 32, SDL_OPENGL) == nullptr) {
+				LOGE("SDL_SetVideoMode({}, {}, 32, SDL_OPENGL) failed: {}", width, height, SDL_GetError());
+				return false;
+			}
+			_width = width;
+			_height = height;
+			// The fixed-function backend keeps state of its own that has to be programmed once per
+			// context, and it needs the drawable's size - the same two calls SdlGfxDevice makes after
+			// creating a GL context. Without them nothing is ever drawn (a black window).
+			RHI::Device::ResizeSwapchain(width, height);
+			RHI::Device::InitializeGl();
+			LOGI("Video mode initialized: {}x{} 32-bit MiniGL/Warp3D", width, height);
+			return true;
+		}
+#else
 		// Walk the display database for RTG modes at 2 bytes per pixel and pick by logical fidelity
 		// within the preset's budget; the requested size (usually unset on this platform) only raises
 		// the budget so an explicit "-w/-h" from the command line is honored when such a mode exists.
@@ -230,12 +291,19 @@ namespace nCine::Backends
 		_width = bestWidth;
 		_height = bestHeight;
 		return true;
+#endif
 	}
 
 	void AmigaGfxDevice::closeDisplay()
 	{
 		AmigaPlatform::GameWindow = nullptr;
 		AmigaPlatform::GameScreen = nullptr;
+
+#if defined(WITH_RHI_LEGACYGL)
+		// The GL path never opened an Intuition screen of its own (see openDisplay), so the window and
+		// screen handles below are null and only SDL has anything to give back
+		SDL_Quit();
+#endif
 
 		if (_window != nullptr) {
 			CloseWindow(_window);
@@ -270,15 +338,28 @@ namespace nCine::Backends
 
 	void AmigaGfxDevice::update()
 	{
+#if defined(WITH_RHI_LEGACYGL)
+		// MiniGL draws straight into the GL context SDL opened, so there is no software framebuffer to
+		// copy: the frame is finished and handed to the driver instead of read back and blitted.
+		// The fixed-function backend batches draws and only submits them when it must, so the frame's
+		// tail is still unsubmitted here - PresentFrame() is what flushes it (see SdlGfxDevice::update).
+		RHI::Device::EndFrame();
+		RHI::Device::PresentFrame();
+		SDL_GL_SwapBuffers();
+#else
 		// Render any draws the tile renderer deferred this frame into the screen buffer before reading it,
 		// and drop unconsumed lighting entries - the same sequence as the SDL software present
 		RHI::Device::FlushSoftwareRenderer();
 		RHI::Device::EndFrame();
 		presentFramebuffer();
+#endif
 	}
 
 	void AmigaGfxDevice::presentFramebuffer()
 	{
+#if defined(WITH_RHI_LEGACYGL)
+		// Nothing to present by hand under MiniGL - see update()
+#else
 		const auto fb = RHI::Device::GetScreenFramebuffer();
 		if (fb.pixels == nullptr || fb.width <= 0 || fb.height <= 0) {
 			return;
@@ -395,6 +476,7 @@ namespace nCine::Backends
 			// A failed change (Intuition was busy) leaves the frame in the back buffer; the next present
 			// simply overwrites it and tries again - dropping a flip beats blocking the game loop
 		}
+#endif
 	}
 
 	void AmigaGfxDevice::setSwapInterval(int interval)
@@ -405,9 +487,56 @@ namespace nCine::Backends
 
 	void AmigaGfxDevice::setResolution(bool fullscreen, int width, int height)
 	{
+#if defined(WITH_RHI_LEGACYGL)
+		// SDL 1.2 resizes by creating the mode again; MiniGL follows the surface it is given, so the GL
+		// state has to be programmed once more afterwards (the context the driver hands back is new).
+		// A size of 0 means "keep what is there" - that is how the fullscreen toggle asks for a flip.
+		if (width <= 0 || height <= 0) {
+			width = _width;
+			height = _height;
+		}
+		const std::uint32_t flags = SDL_OPENGL | (fullscreen ? SDL_FULLSCREEN : 0);
+		SDL_Surface* const surface = SDL_SetVideoMode(width, height, 32, flags);
+		if (surface != nullptr) {
+			// What the driver actually gave back, which is not necessarily what was asked for
+			LOGI("SDL_SetVideoMode({}, {}) returned a {}x{} {}-bit surface", width, height,
+				surface->w, surface->h, surface->format->BitsPerPixel);
+		}
+		if (surface == nullptr) {
+			LOGE("SDL_SetVideoMode({}, {}, 32) failed: {}", width, height, SDL_GetError());
+			return;
+		}
+
+		_width = width;
+		_height = height;
+		_drawableWidth = width;
+		_drawableHeight = height;
+		_isFullscreen = fullscreen;
+		_currentVideoMode.width = std::uint32_t(width);
+		_currentVideoMode.height = std::uint32_t(height);
+
+		// InitializeGl() is not called again - it programs the once-per-context state and returns early
+		// after the first time; SDL 1.2 keeps the context across a mode change here, so that state stands
+		RHI::Device::ResizeSwapchain(width, height);
+		initDeviceViewport();
+		// The scene's own viewports are sized off the drawable, so they have to be told as well - this
+		// is what the SDL backend's resize event does (see MainApplication). Without it the game keeps
+		// drawing at the old size into the new window.
+		theApplication().ResizeScreenViewport(width, height);
+		// Both buffers of the new surface hold whatever was in memory; clearing them keeps the area the
+		// game does not cover from showing the previous mode's leftovers until something overdraws it
+		glViewport(0, 0, width, height);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		for (std::int32_t i = 0; i < 2; i++) {
+			glClear(GL_COLOR_BUFFER_BIT);
+			SDL_GL_SwapBuffers();
+		}
+		LOGI("Video mode changed: {}x{} 32-bit MiniGL/Warp3D{}", width, height, fullscreen ? " fullscreen" : "");
+#else
 		static_cast<void>(fullscreen);
 		static_cast<void>(width);
 		static_cast<void>(height);
+#endif
 	}
 
 	void AmigaGfxDevice::setWindowPosition(int x, int y)
@@ -460,8 +589,36 @@ namespace nCine::Backends
 		_monitors[0].name = "RTG";
 		_monitors[0].position = Vector2i(0, 0);
 		_monitors[0].scale = Vector2f(1.0f, 1.0f);
+
+#if defined(WITH_RHI_LEGACYGL)
+		// The GL path draws into a window SDL sizes, so the list is not the display database's modes but
+		// the sizes this renderer is willing to open - from the smallest RTG screen up to 1080p. They are
+		// offered in ascending order and the current one is placed first, which is what the options menu
+		// shows when nothing has been picked yet.
+		static const struct { std::int32_t W, H; } Candidates[] = {
+			{ 320, 240 }, { 320, 256 }, { 400, 300 }, { 512, 384 }, { 640, 400 }, { 640, 480 },
+			{ 800, 600 }, { 960, 540 }, { 1024, 576 }, { 1024, 768 }, { 1280, 720 }, { 1280, 800 },
+			{ 1280, 1024 }, { 1440, 900 }, { 1600, 900 }, { 1680, 1050 }, { 1920, 1080 }
+		};
+		std::uint32_t count = 0;
+		for (std::size_t i = 0; i < sizeof(Candidates) / sizeof(Candidates[0]); i++) {
+			if (count >= MaxVideoModes) {
+				break;
+			}
+			IGfxDevice::VideoMode& mode = _monitors[0].videoModes[count];
+			mode.width = std::uint32_t(Candidates[i].W);
+			mode.height = std::uint32_t(Candidates[i].H);
+			mode.refreshRate = 60.0f;
+			mode.redBits = 8;
+			mode.greenBits = 8;
+			mode.blueBits = 8;
+			count++;
+		}
+		_monitors[0].numVideoModes = count;
+#else
 		_monitors[0].numVideoModes = 1;
 		_monitors[0].videoModes[0] = _currentVideoMode;
+#endif
 	}
 }
 

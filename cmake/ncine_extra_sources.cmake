@@ -121,7 +121,23 @@ elseif(NCINE_PREFERRED_RHI STREQUAL "LegacyGL")
 	# to follow SDL2 on the link line, which is what the two arms below arrange.
 	message(STATUS "Rendering backend: Legacy OpenGL (fixed-function 1.x)")
 	target_compile_definitions(${NCINE_APP} PRIVATE "WITH_RHI_LEGACYGL")
-	if(PLATFORM_AMIGAOS4)
+	if(PLATFORM_AMIGA)
+		# Classic 68k Amiga: MiniGL v12 (the PiStorm3D SDK), a fixed-function OpenGL 1.2 over Warp3D
+		# reached through minigl.library. Unlike the OS4 SDK this one is a dispatch stub - the call
+		# vectors live in the library and are filled in by MiniGLOpen(), so the archive has to be on
+		# the link line together with the SDL 1.2 build that opens the GL context.
+		set(MGL_V12_SDK "/mnt/d/dev/Pistorm3D/Pistorm3D_v12" CACHE PATH "MiniGL v12 SDK")
+		set(SDL_MGL_V12 "/mnt/d/dev/Pistorm3D/tests/sdl-stormmesa-window/libSDL-mgl-v12.a" CACHE FILEPATH "SDL 1.2 built against MiniGL v12")
+		target_compile_definitions(${NCINE_APP} PRIVATE "AMIGA_SHARED_MINIGL" "GL_GLEXT_LEGACY")
+		target_include_directories(${NCINE_APP} PRIVATE
+			"${MGL_V12_SDK}/include"
+			"/mnt/d/dev/Pistorm3D/libSDL12-mgl/include")
+		target_link_libraries(${NCINE_APP} PRIVATE
+			"-Wl,--start-group" "${SDL_MGL_V12}" "${MGL_V12_SDK}/libminigl_dispatch.a" "-Wl,--end-group")
+		# This SDL build carries its own GfxBase/LowLevelBase in .bss, as does AmigaPlatform; both are
+		# the same library base opened once at startup, so let the linker keep one of them
+		target_link_options(${NCINE_APP} PRIVATE "-Wl,--allow-multiple-definition")
+	elseif(PLATFORM_AMIGAOS4)
 		# MiniGL, the SDK's fixed-function OpenGL over Warp3D. Its stub library has to follow SDL2 on the
 		# link line (SDL2's OS4 video driver calls into it to create the context), which is what listing
 		# it here rather than as an interface dependency of the imported target does - the SDL2 target is
@@ -230,6 +246,10 @@ if(NOT DEDICATED_SERVER AND NOT NCINE_BUILD_LIBRETRO)
 		# 68060-safe. binutils' assembler does not know AMMX, so the module is assembled by vasm,
 		# which ships with the amiga-gcc toolchain ("make vasm").
 		find_program(VASM_EXECUTABLE vasmm68k_mot HINTS "$ENV{AMIGA_INST}/bin")
+		# The kernels are scanline routines of the Software RHI; a LegacyGL build has no such renderer
+		if(NCINE_PREFERRED_RHI STREQUAL "LegacyGL")
+			set(VASM_EXECUTABLE "")
+		endif()
 		if(VASM_EXECUTABLE)
 			# A subdirectory of its own, so the object cannot collide with anything else assembled into the
 			# build root, and vasm itself is a dependency - a toolchain swap re-assembles the module

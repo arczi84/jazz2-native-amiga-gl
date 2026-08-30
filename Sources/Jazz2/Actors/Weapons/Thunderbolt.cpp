@@ -88,7 +88,7 @@ namespace Jazz2::Actors::Weapons
 				} else {
 					angle = atan2f(_farPoint.Y - _pos.Y, _farPoint.X - _pos.X);
 				}
-				angle = lerp(anglePrev, angle, 0.4f * timeMult);
+				angle = nCine::lerp(anglePrev, angle, 0.4f * timeMult);
 				if (std::abs(anglePrev - angle) > 0.06f) {
 					_renderer.setRotation(angle);
 				} else {
@@ -230,7 +230,7 @@ namespace Jazz2::Actors::Weapons
 			for (std::int32_t i = -1; i <= LightCount; i++) {
 				float dist = (float)i / LightCount;
 				auto& light = lights.emplace_back();
-				light.Pos = Vector2f(lerp(pos.X, farPoint.X, dist), lerp(pos.Y, farPoint.Y, dist));
+				light.Pos = Vector2f(nCine::lerp(pos.X, farPoint.X, dist), nCine::lerp(pos.Y, farPoint.Y, dist));
 				light.Intensity = lightIntensity;
 				light.Brightness = lightIntensity * (0.1f + (1.0f - dist) * 0.4f);
 				light.RadiusNear = 20.0f;

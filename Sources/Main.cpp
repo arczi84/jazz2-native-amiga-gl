@@ -690,6 +690,17 @@ void GameEventHandler::OnBackInvoked()
 
 void GameEventHandler::OnKeyPressed(const KeyboardEvent& event)
 {
+#if defined(WITH_AMIGA)
+	// F10 quits through the normal shutdown path. On this platform a build can end up somewhere the
+	// menu cannot be reached from - a frozen picture with the game still running underneath - and a
+	// profiling build has to exit cleanly for `gmon.out` to be written at all.
+	if (event.sym == Keys::F10) {
+		LOGI("F10 pressed - quitting");
+		theApplication().Quit();
+		return;
+	}
+#endif
+
 #if defined(NCINE_HAS_WINDOWS)
 	// Allow F11 and Alt+Enter to switch fullscreen
 	// TODO: Don't override F11 in web browser with newer version of `contrib.glfw3`

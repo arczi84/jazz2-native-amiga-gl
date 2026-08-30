@@ -37,7 +37,7 @@ namespace Jazz2::Actors::Lighting
 
 	void FlickerLight::OnUpdate(float timeMult)
 	{
-		_phase = lerp(_phase, Random().FastFloat(), 0.04f * timeMult);
+		_phase = nCine::lerp(_phase, Random().FastFloat(), 0.04f * timeMult);
 
 		for (auto& part : _parts) {
 			part.Phase += timeMult * 0.02f;
@@ -60,7 +60,7 @@ namespace Jazz2::Actors::Lighting
 		light.Intensity = _intensity * _phase * 0.2f;
 		light.Brightness = _brightness * 0.4f;
 		light.RadiusNear = _radiusNear;
-		light.RadiusFar = lerp(_radiusNear, _radiusFar, _phase);
+		light.RadiusFar = nCine::lerp(_radiusNear, _radiusFar, _phase);
 
 		for (auto& part : _parts) {
 			float phase = sinf(part.Phase * fPi);

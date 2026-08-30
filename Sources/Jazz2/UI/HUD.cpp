@@ -1890,7 +1890,7 @@ namespace Jazz2::UI
 		Actors::ActorBase* actor = viewport->GetTargetActor();
 		if (Actors::Player* player = runtime_cast<Actors::Player>(actor)) {
 			float health = std::clamp((float)player->_health / player->_maxHealth, 0.0f, 1.0f);
-			_rgbHealthLast = lerp(_rgbHealthLast, health, 0.2f);
+			_rgbHealthLast = nCine::lerp(_rgbHealthLast, health, 0.2f);
 		} else {
 			_rgbHealthLast = 0.0f;
 		}
@@ -1940,7 +1940,7 @@ namespace Jazz2::UI
 
 		float distance = sqrtf(powf((float)(Width - x), 2) + powf((float)(Height - y), 2));
 		float value = cosf(AnimationMult * distance / (0.1f * Spacing) + animProgress);
-		float alpha = lerp(powf((value + 1) * 0.5f, 12.0f) * ambientLightLower, 0.8f, ambientLightUpper);
+		float alpha = nCine::lerp(powf((value + 1) * 0.5f, 12.0f) * ambientLightLower, 0.8f, ambientLightUpper);
 		return Color(std::clamp<std::uint32_t>((std::uint32_t)(color.R * alpha), 0u, 255u), std::clamp<std::uint32_t>((std::uint32_t)(color.G * alpha), 0u, 255u), std::clamp<std::uint32_t>((std::uint32_t)(color.B * alpha), 0u, 255u));
 	}
 
