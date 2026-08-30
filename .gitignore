@@ -370,3 +370,15 @@ FodyWeavers.xsd
 # Amiga cross-build trees and their logs
 build-*/
 *-build.log
+
+# Jazz Jackrabbit 2 game data - never redistribute
+*.j2l
+*.j2a
+*.j2t
+*.j2b
+*.j2v
+*.j2m
+*.j2s
+*.mod
+Source/
+Cache/
