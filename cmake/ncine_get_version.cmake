@@ -6,7 +6,7 @@ if(NCINE_VERSION_FROM_GIT)
 		find_package(Git)
 	endif()
 
-	if(GIT_EXECUTABLE AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/.git)
+	if(GIT_EXECUTABLE AND EXISTS ${CMAKE_SOURCE_DIR}/.git)
 		execute_process(
 			COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
 			WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
