@@ -1889,6 +1889,14 @@ namespace Jazz2
 			void OnPairAdded(void* proxyA, void* proxyB) {
 				Actors::ActorBase* actorA = (Actors::ActorBase*)proxyA;
 				Actors::ActorBase* actorB = (Actors::ActorBase*)proxyB;
+			#if defined(DEATH_TARGET_AMIGAOS)
+				// On m68k hard-float the dynamic broad phase eventually stops reporting
+				// player pairs after the active tree grows. Player interactions are handled
+				// by the direct pass below, independently of the tree.
+				if (runtime_cast<Actors::Player>(actorA) || runtime_cast<Actors::Player>(actorB)) {
+					return;
+				}
+			#endif
 				if (((actorA->GetState() | actorB->GetState()) & (Actors::ActorState::CollideWithOtherActors | Actors::ActorState::IsDestroyed)) != Actors::ActorState::CollideWithOtherActors) {
 					return;
 				}
@@ -1902,6 +1910,36 @@ namespace Jazz2
 		};
 		UpdatePairsHelper helper;
 		_collisions.UpdatePairs(&helper);
+
+	#if defined(DEATH_TARGET_AMIGAOS)
+		// The number of active actors is modest and there are at most a few players,
+		// so this deterministic O(players * actors) pass is cheap on PiStorm and
+		// avoids the hard-float failure in the dynamic broad phase. It covers springs,
+		// collectibles, enemies and every other interaction involving a player.
+		for (Actors::Player* player : _players) {
+			for (auto& current : _actors) {
+				Actors::ActorBase* actor = current.get();
+				if (actor == player) {
+					continue;
+				}
+
+				// A player/player pair must be dispatched only once.
+				if (auto* otherPlayer = runtime_cast<Actors::Player>(actor); otherPlayer != nullptr && otherPlayer < player) {
+					continue;
+				}
+
+				if (((player->GetState() | actor->GetState()) & (Actors::ActorState::CollideWithOtherActors | Actors::ActorState::IsDestroyed)) != Actors::ActorState::CollideWithOtherActors) {
+					continue;
+				}
+
+				if (player->IsCollidingWith(actor)) {
+					if (!static_cast<Actors::ActorBase*>(player)->OnHandleCollision(actor)) {
+						actor->OnHandleCollision(player);
+					}
+				}
+			}
+		}
+	#endif
 	}
 
 	void LevelHandler::AssignViewport(Actors::Player* player)
