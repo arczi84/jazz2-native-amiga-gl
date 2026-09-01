@@ -505,6 +505,7 @@ namespace nCine::Backends
 					_mouseState.y = mouseY;
 					if (_inputEventHandler != nullptr) {
 						_inputEventHandler->OnMouseMove(_mouseState);
+					}
 					break;
 			}
 		}

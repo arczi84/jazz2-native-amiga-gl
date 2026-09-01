@@ -1,7 +1,7 @@
 # CMake toolchain file for classic Amiga (AmigaOS 3.x, m68k)
 #
-# Uses Bebbo's amiga-gcc (https://franke.ms/git/bebbo/amiga-gcc, branch amiga13.4 - GCC 13 with full
-# C++17; the default gcc-6.5 branch cannot compile this codebase). The C runtime is libnix
+# Uses AmigaPorts' amiga-gcc wrapper (https://github.com/AmigaPorts/m68k-amigaos-gcc, GCC branch
+# amiga16.2). The C runtime is libnix
 # (-mcrt=nix20, Kickstart 2.0+), which is the leanest of the toolchain's runtimes and enough for a
 # game that ships its own content tree. Like PSL1GHT and libdragon this SDK has no CMake toolchain
 # file of its own, so this one lives with the project.
@@ -10,10 +10,11 @@
 # bin/m68k-amigaos-gcc). zlib must be cross-compiled into "$AMIGA_INST/m68k-amigaos" once, exactly
 # like the N64 toolchain's zlib (see Docs/Amiga.dox for the one-time commands).
 #
-# The binary targets a 68040/68060 with FPU ("-mcpu=68060", which implies the FPU): GCC's 68060 code generation
-# avoids the instructions the 060 traps on, the 68080 (Vampire) and Emu68 (PiStorm) execute the
-# same code natively, and a plain 68040 runs it through the 68040 support libraries. Machines
-# without an FPU are below this port's floor (see Docs/AmigaPortDesign.md).
+# The binary targets a 68040/68060 with FPU. `-mcpu=68060` selects the CPU instruction set, while
+# `-mhard-float` explicitly enables FPU code generation and the hard-float ABI. GCC's 68060 code
+# generation avoids the instructions the 060 traps on, the 68080 (Vampire) and Emu68 (PiStorm)
+# execute the same code natively, and a plain 68040 runs it through the 68040 support libraries.
+# Machines without an FPU are below this port's floor (see Docs/AmigaPortDesign.md).
 
 if(DEFINED ENV{AMIGA_INST})
 	set(AMIGA_INST $ENV{AMIGA_INST})
@@ -22,7 +23,7 @@ else()
 endif()
 
 if(NOT EXISTS "${AMIGA_INST}/bin/m68k-amigaos-gcc")
-	message(FATAL_ERROR "amiga-gcc not found at \"${AMIGA_INST}\" (build https://franke.ms/git/bebbo/amiga-gcc with the gcc module on branch amiga13.4)")
+	message(FATAL_ERROR "amiga-gcc not found at \"${AMIGA_INST}\" (build https://github.com/AmigaPorts/m68k-amigaos-gcc with the GCC branch amiga16.2)")
 endif()
 if(NOT EXISTS "${AMIGA_INST}/m68k-amigaos/ndk-include/exec/exec.h" AND NOT EXISTS "${AMIGA_INST}/m68k-amigaos/ndk/include/exec/exec.h")
 	message(FATAL_ERROR "amiga-gcc at \"${AMIGA_INST}\" has no NDK headers (run its \"make ndk\" target)")
@@ -45,8 +46,9 @@ set(CMAKE_OBJCOPY "${AMIGA_INST}/bin/m68k-amigaos-objcopy" CACHE FILEPATH "Objco
 # There is no Amiga host to run a link test on, so CMake's compiler probe has to stop at the object file
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-# -mcpu=68060: see the header comment; the 060 implies its FPU, and an EXPLICIT -m68881 must not be
-# added - it knocks GCC's multilib selection off "libm060" back to the plain-68000 libraries.
+# -mcpu=68060 and -mhard-float: see the header comment. The GCC multilib configuration must map
+# -mhard-float to the same hard-float runtime selection as -m68881; otherwise generated callers and
+# libgcc helpers use incompatible floating-point return conventions.
 # -fomit-frame-pointer matters on a register-starved 68k. -fno-exceptions is the project's
 # convention on the console tier and libnix has no unwinder anyway (RTTI stays on - the game has a
 # dynamic_cast or two, like every other console build). Large data/code model is the compiler's
@@ -55,7 +57,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 # to a WEAK symbol against the wrong address (verified with a minimal two-line reproducer - strong
 # targets and ordinary jsr calls to the same weak symbols resolve fine), and a C++ codebase is full
 # of tail calls into inline/template functions. Costs only the tail-call optimization.
-set(_amigaMachDep "-mcpu=68060 -mcrt=nix20 -fomit-frame-pointer -fno-exceptions -fno-optimize-sibling-calls")
+set(_amigaMachDep "-mcpu=68060 -mhard-float -mcrt=nix20 -fomit-frame-pointer -fno-exceptions -fno-optimize-sibling-calls")
 
 set(CMAKE_C_FLAGS_INIT "${_amigaMachDep}")
 # The force-included header restores the C99 maths set libstdc++ was configured without - the same

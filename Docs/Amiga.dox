@@ -41,7 +41,7 @@ is chosen at startup by measuring the machine — see @ref amiga-presets.
 
 Property | Value
 -------- | -----
-Toolchain | bebbo's **amiga-gcc**, `gcc` module on branch `amiga13.4` @m_span{m-text m-dim} (`cmake/toolchains/amiga.cmake`) @m_endspan
+Toolchain | AmigaPorts' **m68k-amigaos-gcc**, GCC branch `amiga16.2` with the hard-float multilib alias fix @m_span{m-text m-dim} (`cmake/toolchains/amiga.cmake`) @m_endspan
 C runtime | libnix @m_span{m-text m-dim} (`-mcrt=nix20`) @m_endspan
 Rendering backend | `Software` @m_span{m-text m-dim} (pinned -- any other value is a configure error) @m_endspan, forced to 16-bit surfaces
 Window/input backend | `Amiga` @m_span{m-text m-dim} (`Sources/nCine/Backends/Amiga/`) @m_endspan — Intuition screen, IDCMP input, lowlevel.library gamepads
@@ -105,7 +105,7 @@ with `fd2sfd` + `sfdc` into `$PREFIX/m68k-amigaos/ndk-include`.</li>
 <li>**zlib**, the one third-party library the game cannot run without:
 @code{.sh}
 curl -LO https://zlib.net/zlib-1.3.1.tar.gz && tar xf zlib-1.3.1.tar.gz && cd zlib-1.3.1
-CC=$PREFIX/bin/m68k-amigaos-gcc CFLAGS='-mcpu=68060 -O2 -mcrt=nix20' \
+CC=$PREFIX/bin/m68k-amigaos-gcc CFLAGS='-mcpu=68060 -mhard-float -O2 -mcrt=nix20' \
     ./configure --prefix=$PREFIX/m68k-amigaos --static
 make -j$(nproc) libz.a && make install
 @endcode
@@ -121,8 +121,9 @@ works -- the kernels are assembled with `-m68080 -Fhunk`.</li>
 "cleaned up":
 
 <ul>
-<li>`-mcpu=68060` **without** an explicit `-m68881`. The 68060 implies its FPU, and adding `-m68881`
-silently knocks GCC's multilib selection off `libm060` back onto the plain-68000 libraries.</li>
+<li>`-mcpu=68060 -mhard-float`. The CPU option alone does not enable GCC's hard-float ABI. GCC's
+Amiga target must map `-mhard-float` to the same multilib selection as `-m68881`; otherwise hard-float
+callers can be linked to soft-float runtime helpers with an incompatible scalar return convention.</li>
 <li>`-fno-optimize-sibling-calls` — this is **correctness, not tuning**. bebbo's binutils resolves a
 sibling call @m_span{m-text m-dim} (`bra.l`, and `ld`'s own `60FF`/`61FF` → `4EB9` conversion)
 @m_endspan to a *weak* symbol against the wrong address, so any tail call into an inline or template
