@@ -1,4 +1,5 @@
 #include "LegacyGlDevice.h"
+#include "../../../Backends/Amiga/AmigaIntroProfile.h"
 #include <cstdio>
 #include <cstdlib>
 #include "LegacyGlBuffer.h"
@@ -439,7 +440,12 @@ namespace nCine::RHI::LegacyGL
 #else
 			glInterleavedArrays(GL_T2F_C4UB_V3F, 0, base);
 #endif
-			glDrawArrays(batchState.Prim, 0, batchVertexCount);
+			{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+				nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::DrawCall);
+#endif
+				glDrawArrays(batchState.Prim, 0, batchVertexCount);
+			}
 			frameDrawCalls++;
 			frameVertices += std::uint32_t(batchVertexCount);
 			batchVertexCount = 0;

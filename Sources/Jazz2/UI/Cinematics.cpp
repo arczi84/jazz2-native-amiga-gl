@@ -11,6 +11,8 @@
 #include "../../nCine/Input/JoyMapping.h"
 #include "../../nCine/Audio/AudioBufferPlayer.h"
 #include "../../nCine/Base/FrameTimer.h"
+#include "../../nCine/Backends/Amiga/AmigaIntroProfile.h"
+#include "../../nCine/Backends/Amiga/AmigaPlatform.h"
 
 #include <Base/Memory.h>
 #include <Containers/StringConcatenable.h>
@@ -99,6 +101,9 @@ namespace Jazz2::UI
 
 	Cinematics::~Cinematics()
 	{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+		nCine::Backends::IntroProfile::End();
+#endif
 		_canvas->setParent(nullptr);
 	}
 
@@ -109,6 +114,17 @@ namespace Jazz2::UI
 
 	void Cinematics::OnBeginFrame()
 	{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+		nCine::Backends::IntroProfile::Begin(_textureWidth, _textureHeight);
+#endif
+#if defined(WITH_AMIGA)
+		if (_framesLeft > 0) {
+#if defined(JAZZ2_PROFILE_INTRO)
+			nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::CinematicWait);
+#endif
+			nCine::Backends::AmigaPlatform::PaceCinematicFrame(_previousPresentationTick);
+		}
+#endif
 		// The frame timer clamps GetTimeMult() to keep gameplay stable on slow frames, but the video has
 		// to track real time - the music plays in real time, and on platforms that can't render 60 FPS
 		// the clamp would stretch the video far beyond its runtime
@@ -695,6 +711,12 @@ namespace Jazz2::UI
 		std::uint32_t sampleCount = s->ReadValueAsLE<std::uint16_t>();
 		for (std::uint32_t i = 0; i < sampleCount; i++) {
 			std::uint8_t stringSize = s->ReadValue<std::uint8_t>();
+			if (stringSize == 0) {
+				// The converter writes an empty path for unmapped samples.
+				// Preserve playlist indices without trying to open "Animations".
+				_sfxSamples.emplace_back();
+				continue;
+			}
 			String samplePath = String(NoInit, stringSize);
 			s->Read(samplePath.data(), stringSize);
 
@@ -725,12 +747,22 @@ namespace Jazz2::UI
 
 	void Cinematics::PrepareNextFrame()
 	{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+		++nCine::Backends::IntroProfile::frames;
+		{
+			nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Decode);
+#endif
 		if (_nativeFormat) {
 			DecodeFrameNative();
 		} else {
 			DecodeFrameLegacy();
 		}
 
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+		}
+		{
+			nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Prepare);
+#endif
 		if (_paletteDirty) {
 			_paletteDirty = false;
 			std::memcpy(_uploadPalette, _palette, sizeof(_uploadPalette));
@@ -739,6 +771,10 @@ namespace Jazz2::UI
 
 		ApplyPaletteAndUpload(_buffer.get());
 
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+		}
+		nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Sounds);
+#endif
 		PlayFrameSounds();
 	}
 

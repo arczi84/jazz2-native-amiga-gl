@@ -2,6 +2,7 @@
 #include "LegacyGlApi.h"
 #include "LegacyGlDevice.h"
 #include "../../../../Main.h"
+#include "../../../Backends/Amiga/AmigaIntroProfile.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -291,8 +292,13 @@ namespace nCine::RHI::LegacyGL
 		// Deliberately NOT bracketed by glGetError(): that call has to synchronise with the driver,
 		// and a level change uploads hundreds of pages in a row - the two error queries this upload
 		// would otherwise make are two pipeline flushes each time.
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, page.PaddedWidth, page.PaddedHeight, 0,
-			GL_RGBA, GL_UNSIGNED_BYTE, page.Data);
+		{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+			nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Upload);
+#endif
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, page.PaddedWidth, page.PaddedHeight, 0,
+				GL_RGBA, GL_UNSIGNED_BYTE, page.Data);
+		}
 		// Filters and wrapping are per-draw state (the device sets them from the material), but a texture
 		// with no mip chain must not be left on a mipmapping filter or it samples as incomplete
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -420,7 +426,12 @@ namespace nCine::RHI::LegacyGL
 			// costs neither a conversion nor an upload
 			page.GlTexture = store.PageTextures[i];
 			page.Uploaded = false;
-			BuildBakedPage(page, store.Data + offset, paletteRow);
+			{
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+				nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Bake);
+#endif
+				BuildBakedPage(page, store.Data + offset, paletteRow);
+			}
 			if (!UploadPage(page)) {
 				return false;
 			}

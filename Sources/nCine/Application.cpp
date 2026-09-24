@@ -1,5 +1,7 @@
 ﻿#include "Application.h"
 
+#include "Backends/Amiga/AmigaIntroProfile.h"
+
 #if defined(DEATH_TARGET_WINDOWS)
 extern "C"
 {
@@ -1169,6 +1171,9 @@ namespace nCine
 
 				{
 					ZoneScopedNC("Draw", 0x81A861);
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+					nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::QueueDraw);
+#endif
 #if defined(NCINE_PROFILING)
 					_profileStartTime = TimeStamp::now();
 #endif
@@ -1222,6 +1227,9 @@ namespace nCine
 		}
 
 		if (_appCfg.frameLimit > 0) {
+#if defined(WITH_AMIGA) && defined(JAZZ2_PROFILE_INTRO)
+			nCine::Backends::IntroProfile::Scope timing(nCine::Backends::IntroProfile::Limit);
+#endif
 			FrameMarkStart("Frame limiting");
 			const std::int64_t frameTimeDuration = clock().frequency() / _appCfg.frameLimit;
 

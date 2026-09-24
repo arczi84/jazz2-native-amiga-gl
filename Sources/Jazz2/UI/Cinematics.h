@@ -119,6 +119,9 @@ namespace Jazz2::UI
 		std::uint32_t _videoDownscale;
 		std::uint32_t _textureWidth, _textureHeight;
 		float _frameDelay, _frameProgress;
+#if defined(WITH_AMIGA)
+		std::uint64_t _previousPresentationTick = 0;
+#endif
 		std::int32_t _frameIndex;
 		std::int32_t _framesLeft;
 		// Double-buffered: uploading into the texture the GPU may still sample from the previous

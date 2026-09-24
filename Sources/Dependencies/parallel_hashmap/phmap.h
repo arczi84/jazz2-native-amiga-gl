@@ -332,7 +332,14 @@ static_assert(kDeleted == -2,
 template <class std_alloc_t>
 inline ctrl_t* EmptyGroup() {
   PHMAP_IF_CONSTEXPR (std_alloc_t::value) {
-      alignas(16) static constexpr ctrl_t empty_group[] = {
+#if defined(DEATH_TARGET_AMIGAOS)
+      // Amiga's object format permits at most 8-byte alignment; this target
+      // uses GroupPortableImpl, not the 16-byte SSE2 implementation.
+      alignas(8)
+#else
+      alignas(16)
+#endif
+      static constexpr ctrl_t empty_group[] = {
           kSentinel, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty,
           kEmpty,    kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty, kEmpty};
 

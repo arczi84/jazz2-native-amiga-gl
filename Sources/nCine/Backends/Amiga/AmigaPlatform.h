@@ -51,6 +51,9 @@ namespace nCine::Backends
 		/** @brief Current 64-bit EClock value, monotonic for any realistic uptime */
 		static std::uint64_t TimerTicks();
 
+		/** @brief Caps cinematic presentation near 50 Hz, yielding via AmigaDOS instead of polling. */
+		static void PaceCinematicFrame(std::uint64_t& previousTick);
+
 		static PerformanceClass GetPerformanceClass();
 		/** @brief Overrides the measured class (from a user setting or command-line switch) */
 		static void SetPerformanceClass(PerformanceClass performanceClass);

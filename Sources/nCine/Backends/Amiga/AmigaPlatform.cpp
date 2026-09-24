@@ -1,6 +1,9 @@
 #if defined(WITH_AMIGA)
 
+#include <dos/dos.h>
+#include <clib/dos_protos.h>
 #include "AmigaPlatform.h"
+#include "AmigaFramePacing.h"
 #include "../../../Main.h"
 
 #include <Environment.h>
@@ -17,6 +20,7 @@
 #include <exec/execbase.h>
 #include <exec/memory.h>
 #include <proto/exec.h>
+#include <proto/dos.h>
 
 #if defined(WITH_AMMX)
 #	include "../../Graphics/RHI/Software/SwAmmxOps.h"
@@ -253,6 +257,19 @@ namespace nCine::Backends
 		// Unconverted ticks, which is what the frame clock and the audio device want - no 64-bit division
 		// per reading, which on a 68k is a libgcc call
 		return Death::Environment::Implementation::QueryAmigaEClock();
+	}
+
+	void AmigaPlatform::PaceCinematicFrame(std::uint64_t& previousTick)
+	{
+		const auto now = TimerTicks();
+		if (ShouldYieldCinematicFrame(now, previousTick, TimerFrequency())) {
+			// Delay blocks this task, letting the OS/emulator do other work.
+			// No busy-wait, and no attempt to catch up missed presentation slots.
+			Delay(1);
+			previousTick = TimerTicks();
+		} else {
+			previousTick = now;
+		}
 	}
 
 	AmigaPlatform::PerformanceClass AmigaPlatform::GetPerformanceClass()

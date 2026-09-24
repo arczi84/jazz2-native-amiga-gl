@@ -39,6 +39,22 @@ namespace nCine
 					return 22050;
 			}
 		}
+
+		std::int64_t MixingStep(std::int32_t sourceFrequency, std::int32_t outputFrequency, float pitch)
+		{
+			// Keep the 32.32 cursor conversion away from double -> int64_t. The GCC 16
+			// Amiga hard-float driver can link a soft-float __fixdfdi helper whose ABI
+			// does not match the generated caller, producing a bogus (often enormous)
+			// step and making short sound effects disappear. Converting the small pitch
+			// value to Q16 uses the FPU directly; the rest is integer arithmetic.
+			std::int32_t pitchQ16 = std::int32_t(pitch * 65536.0f + 0.5f);
+			if (pitchQ16 < 1) {
+				pitchQ16 = 1;
+			}
+			const std::uint64_t rateQ32 = (std::uint64_t(std::uint32_t(sourceFrequency)) << 32) /
+				std::uint32_t(outputFrequency);
+			return std::int64_t((rateQ32 * std::uint32_t(pitchQ16)) >> 16);
+		}
 	}
 
 	AmigaAudioDevice::AmigaAudioDevice()
@@ -683,7 +699,10 @@ namespace nCine
 
 	void AmigaAudioDevice::ComputePanning(const Source& source, float& leftGain, float& rightGain) const
 	{
-		AudioMixer::ComputeStereoGains(source.Relative, source.Position, _listenerPos, source.Gain, _gain, leftGain, rightGain);
+		// GCC 16.2 RC7 selects a soft-float runtime for this hard-float build. Its
+		// positional panning path can produce invalid gains and silence effects, so
+		// keep Amiga sources centred until the toolchain multilib ABI is corrected.
+		AudioMixer::ComputeStereoGains(true, source.Position, _listenerPos, source.Gain, _gain, leftGain, rightGain);
 	}
 
 	bool AmigaAudioDevice::MixSource(Source& source, std::int32_t* output, std::int32_t frames)
@@ -700,7 +719,7 @@ namespace nCine
 		const std::int32_t leftQ15 = std::int32_t(leftGain * 32768.0f + 0.5f);
 		const std::int32_t rightQ15 = std::int32_t(rightGain * 32768.0f + 0.5f);
 
-		std::int64_t step = std::int64_t((double(buffer->Frequency) / double(_outputFrequency)) * double(source.Pitch) * 4294967296.0);
+		std::int64_t step = MixingStep(buffer->Frequency, _outputFrequency, source.Pitch);
 		std::int64_t end = std::int64_t(buffer->FrameCount) << 32;
 
 		for (std::int32_t i = 0; i < frames; i++) {
@@ -718,7 +737,7 @@ namespace nCine
 					if (buffer == nullptr) {
 						return false;
 					}
-					step = std::int64_t((double(buffer->Frequency) / double(_outputFrequency)) * double(source.Pitch) * 4294967296.0);
+					step = MixingStep(buffer->Frequency, _outputFrequency, source.Pitch);
 					end = std::int64_t(buffer->FrameCount) << 32;
 				} else if (source.Looping) {
 					source.Cursor %= end;

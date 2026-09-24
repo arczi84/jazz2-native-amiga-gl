@@ -59,6 +59,13 @@ elseif(NOT TARGET Libxmp)
 	# What the header keys its import/export attributes off; without it a Windows build would declare
 	# every entry point `__declspec(dllimport)` and link against an import library that is not there
 	target_compile_definitions(Libxmp PUBLIC "LIBXMP_STATIC")
+	if(PLATFORM_AMIGA)
+		# This vendored target deliberately bypasses libxmp's own CMakeLists, including
+		# its TestBigEndian check. The classic Amiga is big-endian; without this define
+		# libxmp does not byte-swap little-endian 16-bit J2B samples (Intro.j2b contains
+		# one), so they are played as noise. Keep this in sync with libxmp-checks.cmake.
+		target_compile_definitions(Libxmp PRIVATE "WORDS_BIGENDIAN=1")
+	endif()
 
 	# The dependency's own file set (117 C files) is globbed rather than listed: it is taken verbatim
 	# from the release and never edited here

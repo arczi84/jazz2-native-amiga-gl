@@ -1,8 +1,14 @@
 #if defined(WITH_AMIGA)
 
+#if defined(JAZZ2_PROFILE_INTRO)
+#include <dos/dos.h>
+#include <clib/dos_protos.h>
+#endif
+
 #include "AmigaGfxDevice.h"
 #include "../../Application.h"
 #include "AmigaPlatform.h"
+#include "AmigaIntroProfile.h"
 #include "../../Graphics/RHI/Rhi.h"
 #include "../../../Main.h"
 
@@ -25,6 +31,16 @@
 #include <proto/graphics.h>
 #include <proto/intuition.h>
 #include <proto/cybergraphics.h>
+#if defined(JAZZ2_PROFILE_INTRO)
+#include <proto/dos.h>
+std::int64_t nCine::Backends::IntroProfile::SystemTimeMs()
+{
+	struct DateStamp stamp;
+	DateStamp(&stamp);
+	return ((std::int64_t(stamp.ds_Days) * 1440 + stamp.ds_Minute) * 60 * 1000)
+		+ std::int64_t(stamp.ds_Tick) * 1000 / TICKS_PER_SECOND;
+}
+#endif
 
 using namespace Death::Containers::Literals;
 
@@ -343,9 +359,19 @@ namespace nCine::Backends
 		// copy: the frame is finished and handed to the driver instead of read back and blitted.
 		// The fixed-function backend batches draws and only submits them when it must, so the frame's
 		// tail is still unsubmitted here - PresentFrame() is what flushes it (see SdlGfxDevice::update).
-		RHI::Device::EndFrame();
-		RHI::Device::PresentFrame();
-		SDL_GL_SwapBuffers();
+		{
+#if defined(JAZZ2_PROFILE_INTRO)
+			IntroProfile::Scope timing(IntroProfile::PresentFlush);
+#endif
+			RHI::Device::EndFrame();
+			RHI::Device::PresentFrame();
+		}
+		{
+#if defined(JAZZ2_PROFILE_INTRO)
+			IntroProfile::Scope timing(IntroProfile::Swap);
+#endif
+			SDL_GL_SwapBuffers();
+		}
 #else
 		// Render any draws the tile renderer deferred this frame into the screen buffer before reading it,
 		// and drop unconsumed lighting entries - the same sequence as the SDL software present
