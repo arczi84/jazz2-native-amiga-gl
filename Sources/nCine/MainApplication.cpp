@@ -480,6 +480,12 @@ namespace nCine
 			if (pspShutdownRequested) {
 				app.Quit();
 			}
+#	elif defined(DEATH_TARGET_AMIGAOS)
+			// Ctrl-C (or `Break` from another shell) quits cleanly, like any other Shell program
+			if (AmigaPlatform::BreakRequested()) {
+				LOGI("Ctrl-C received - quitting");
+				app.Quit();
+			}
 #	endif
 		}
 #endif

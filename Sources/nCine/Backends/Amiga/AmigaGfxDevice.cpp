@@ -95,7 +95,11 @@ namespace nCine::Backends
 
 		_drawableWidth = _width;
 		_drawableHeight = _height;
+#if defined(WITH_RHI_LEGACYGL)
+		_isFullscreen = _openedFullscreen;
+#else
 		_isFullscreen = true;
+#endif
 
 		_currentVideoMode.width = std::uint32_t(_width);
 		_currentVideoMode.height = std::uint32_t(_height);
@@ -124,6 +128,21 @@ namespace nCine::Backends
 	AmigaGfxDevice::~AmigaGfxDevice()
 	{
 		closeDisplay();
+	}
+
+	bool AmigaGfxDevice::hasExactRtgMode(std::int32_t width, std::int32_t height)
+	{
+		ULONG modeId = NextDisplayInfo(INVALID_ID);
+		while (modeId != INVALID_ID) {
+			if (IsCyberModeID(modeId) &&
+				GetCyberIDAttr(CYBRIDATTR_WIDTH, modeId) == ULONG(width) &&
+				GetCyberIDAttr(CYBRIDATTR_HEIGHT, modeId) == ULONG(height) &&
+				GetCyberIDAttr(CYBRIDATTR_DEPTH, modeId) >= 24) {
+				return true;
+			}
+			modeId = NextDisplayInfo(modeId);
+		}
+		return false;
 	}
 
 	bool AmigaGfxDevice::openDisplay(std::int32_t requestedWidth, std::int32_t requestedHeight)
@@ -158,10 +177,35 @@ namespace nCine::Backends
 			SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 			SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 			SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-			if (SDL_SetVideoMode(width, height, 32, SDL_OPENGL) == nullptr) {
+			// Fullscreen is chosen here, at startup, and never switched in place: a mode change of a live
+			// MiniGLV3D 29.1 context leaves part of its pipeline at the old size (duplicated image, garbage)
+			// Fullscreen needs the patched SDL (libSDL12-mgl with the FS4 fullscreen fix: direct BGRA32 mode
+			// lookup, MiniGL borrowing SDL's window via mglCreateContextFromWindow). The unpatched SDL fails
+			// with "No matching visual for requested depth" on the PiStorm VideoCore modes and crashes later.
+			bool fullscreen = Jazz2::PreferencesCache::EnableFullscreen;
+			// MiniGL opens a fullscreen screen only in an RTG mode of EXACTLY this size (MiniGLV3D also wants
+			// 32-bit), and when there is none the context fails after SDL has already asked to close the
+			// Workbench - the game then dies at startup. So without such a mode the game stays in a window.
+			if (fullscreen && !hasExactRtgMode(width, height)) {
+				LOGW("No {}x{} 32-bit RTG screen mode (add one in Picasso96Mode) - opening a window instead", width, height);
+				fullscreen = false;
+			}
+			SDL_Surface* surface = SDL_SetVideoMode(width, height, 32, SDL_OPENGL | (fullscreen ? SDL_FULLSCREEN : 0));
+			if (surface == nullptr && fullscreen) {
+				// SDL's fullscreen path opens a screen of its own and can fail to match a visual to it (seen on
+				// the PiStorm VideoCore modes: "No matching visual for requested depth") - fall back to a window
+				LOGW("SDL_SetVideoMode({}, {}, 32, SDL_OPENGL | SDL_FULLSCREEN) failed: {} - opening a window instead",
+					width, height, SDL_GetError());
+				fullscreen = false;
+				surface = SDL_SetVideoMode(width, height, 32, SDL_OPENGL);
+			}
+			if (surface == nullptr) {
 				LOGE("SDL_SetVideoMode({}, {}, 32, SDL_OPENGL) failed: {}", width, height, SDL_GetError());
 				return false;
 			}
+			_openedFullscreen = fullscreen;
+			// The game is played with keyboard/joystick only - no pointer over the window or screen
+			SDL_ShowCursor(SDL_DISABLE);
 			_width = width;
 			_height = height;
 			// The fixed-function backend keeps state of its own that has to be programmed once per
@@ -169,7 +213,7 @@ namespace nCine::Backends
 			// creating a GL context. Without them nothing is ever drawn (a black window).
 			RHI::Device::ResizeSwapchain(width, height);
 			RHI::Device::InitializeGl();
-			LOGI("Video mode initialized: {}x{} 32-bit MiniGL/Warp3D", width, height);
+			LOGI("Video mode initialized: {}x{} 32-bit MiniGL/Warp3D{}", width, height, fullscreen ? " fullscreen" : "");
 			return true;
 		}
 #else
@@ -557,6 +601,9 @@ namespace nCine::Backends
 			glClear(GL_COLOR_BUFFER_BIT);
 			SDL_GL_SwapBuffers();
 		}
+		SDL_ShowCursor(SDL_DISABLE);
+		// A new mode can mean a new MiniGL window, which comes up with MiniGL's own title again
+		SDL_WM_SetCaption(_screenTitle.data(), _screenTitle.data());
 		LOGI("Video mode changed: {}x{} 32-bit MiniGL/Warp3D{}", width, height, fullscreen ? " fullscreen" : "");
 #else
 		static_cast<void>(fullscreen);
@@ -585,7 +632,33 @@ namespace nCine::Backends
 		if (windowTitle.empty()) {
 			return;
 		}
-		_screenTitle = windowTitle;
+		// Intuition draws titles in ISO-8859-1, the app name is UTF-8 ("Jazz²" would show as "JazzÂ²"):
+		// two-byte sequences U+0080..U+00FF are folded to their Latin-1 byte, anything else becomes '?'
+		{
+			String latin1{NoInit, windowTitle.size()};
+			std::size_t n = 0;
+			for (std::size_t i = 0; i < windowTitle.size(); i++) {
+				const unsigned char c = static_cast<unsigned char>(windowTitle[i]);
+				if (c < 0x80) {
+					latin1[n++] = char(c);
+				} else if (c == 0xC2 && i + 1 < windowTitle.size() && static_cast<unsigned char>(windowTitle[i + 1]) == 0xB2) {
+					// Superscript two renders badly in the Workbench title font: "Jazz2", not "Jazz²"
+					latin1[n++] = '2';
+					i++;
+				} else if ((c == 0xC2 || c == 0xC3) && i + 1 < windowTitle.size()) {
+					latin1[n++] = char(((c & 0x03) << 6) | (static_cast<unsigned char>(windowTitle[i + 1]) & 0x3F));
+					i++;
+				} else if (c >= 0xC0) {
+					latin1[n++] = '?';
+				}
+			}
+			_screenTitle = String(latin1.data(), n);
+		}
+#if defined(WITH_RHI_LEGACYGL)
+		// The window is MiniGL's, adopted by SDL (it opens it titled "MiniGLV3D Display"): SDL's caption call
+		// is what reaches it. SDL 1.2 keeps its own copy of the string.
+		SDL_WM_SetCaption(_screenTitle.data(), _screenTitle.data());
+#endif
 		if (_window != nullptr) {
 			// (STRPTR)~0 leaves the window's own title alone
 			SetWindowTitles(_window, reinterpret_cast<STRPTR>(~std::uintptr_t(0)), reinterpret_cast<STRPTR>(_screenTitle.data()));

@@ -61,6 +61,8 @@ namespace nCine::Backends
 	private:
 		void update() override;
 
+/** @brief Returns whether an RTG screen mode of exactly this size with 24/32-bit depth exists */
+static bool hasExactRtgMode(std::int32_t width, std::int32_t height);
 		bool openDisplay(std::int32_t requestedWidth, std::int32_t requestedHeight);
 		void closeDisplay();
 		void presentFramebuffer();
@@ -76,6 +78,8 @@ namespace nCine::Backends
 		bool _doubleBuffered;
 		std::uint32_t _pixelFormat;
 		bool _pixelFormatLogged;
+		/** @brief Whether the MiniGL window was opened as a fullscreen screen (chosen at startup only) */
+		bool _openedFullscreen = false;
 
 		friend class ::nCine::MainApplication;
 	};

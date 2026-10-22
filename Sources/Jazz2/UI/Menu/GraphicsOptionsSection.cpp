@@ -56,6 +56,14 @@ namespace Jazz2::UI::Menu
 			list->Add<ChoiceItem>(_("Resolution"),
 				[this]() -> StringView {
 					Vector2i res = theApplication().GetGfxDevice().drawableResolution();
+#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+					// A size picked here only takes effect on the next start (see below), so say so
+					if (PreferencesCache::PreferredWidth > 0 && PreferencesCache::PreferredHeight > 0 &&
+						(PreferencesCache::PreferredWidth != res.X || PreferencesCache::PreferredHeight != res.Y)) {
+						_resolutionValue = format("{}x{} (restart)", PreferencesCache::PreferredWidth, PreferencesCache::PreferredHeight);
+						return _resolutionValue;
+					}
+#endif
 					_resolutionValue = format("{}x{}", res.X, res.Y);
 					return _resolutionValue;
 				},
@@ -63,7 +71,12 @@ namespace Jazz2::UI::Menu
 					IGfxDevice& device = theApplication().GetGfxDevice();
 					const IGfxDevice::Monitor& monitor = device.monitor(0);
 					const std::int32_t count = monitor.numVideoModes;
-					const Vector2i current = device.drawableResolution();
+					Vector2i current = device.drawableResolution();
+#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+					if (PreferencesCache::PreferredWidth > 0 && PreferencesCache::PreferredHeight > 0) {
+						current = Vector2i(PreferencesCache::PreferredWidth, PreferencesCache::PreferredHeight);
+					}
+#endif
 					// The modes are listed ascending, so the nearest one at or above the current size is
 					// where Left/Right starts from; clamped at both ends, no wraparound
 					std::int32_t index = count - 1;
@@ -84,8 +97,15 @@ namespace Jazz2::UI::Menu
 					// its window in place (SDL 1.2 with MiniGL) still opens at this size next time
 					PreferencesCache::PreferredWidth = std::int32_t(picked.width);
 					PreferencesCache::PreferredHeight = std::int32_t(picked.height);
+#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+					// No in-place change on Amiga/MiniGL: MiniGLV3D 29.1 resizes a live context badly (part of
+					// the pipeline stays at the old size - duplicated image, garbage). The size is saved and the
+					// window opens at it on the next start.
+					static_cast<void>(device);
+#else
 					device.setResolution(PreferencesCache::EnableFullscreen,
 						std::int32_t(picked.width), std::int32_t(picked.height));
+#endif
 					_isDirty = true;
 				}) : nullptr);
 		}
@@ -111,6 +131,22 @@ namespace Jazz2::UI::Menu
 					_isDirty = true;
 				});
 		}
+#endif
+#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+		// Amiga (MiniGL): no in-place switch - the screen is opened once at startup, see AmigaGfxDevice.
+		// The choice is saved and takes effect the next time the game starts.
+		// TRANSLATORS: Menu item in Options > Graphics section
+		list->Add<ChoiceItem>(_("Fullscreen"),
+			[]() -> StringView {
+				if (PreferencesCache::EnableFullscreen != theApplication().GetGfxDevice().isFullscreen()) {
+					return (PreferencesCache::EnableFullscreen ? "Enabled (restart)"_s : "Disabled (restart)"_s);
+				}
+				return (PreferencesCache::EnableFullscreen ? _("Enabled") : _("Disabled"));
+			},
+			[this](std::int32_t) {
+				PreferencesCache::EnableFullscreen = !PreferencesCache::EnableFullscreen;
+				_isDirty = true;
+			});
 #endif
 #if defined(RHI_CAP_POSTPROCESSING) && !defined(DEATH_TARGET_VITA)
 		// The antialiasing subpass is part of the rescale shader chain, which the direct tier bypasses

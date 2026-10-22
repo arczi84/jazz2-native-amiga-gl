@@ -47,6 +47,11 @@ extern "C" {
 unsigned long __stack = 1024 * 1024;
 }
 
+namespace nCine::Backends::AmigaGlTrace
+{
+	void Install();
+}
+
 namespace nCine::Backends
 {
 	namespace
@@ -124,6 +129,7 @@ namespace nCine::Backends
 			return false;
 		}
 		LOGI("minigl.library opened");
+		nCine::Backends::AmigaGlTrace::Install();
 #endif
 
 		// The whole rendering path presents into an RTG chunky framebuffer through the CyberGraphX API,
@@ -218,6 +224,11 @@ namespace nCine::Backends
 		LOGI("Performance preset: {}{}", PerformanceClassName(_performanceClass),
 			(presetForced ? " (forced by NCINE_PRESET)" : ""));
 		return true;
+	}
+
+	bool AmigaPlatform::BreakRequested()
+	{
+		return (SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0;
 	}
 
 	void AmigaPlatform::Shutdown()

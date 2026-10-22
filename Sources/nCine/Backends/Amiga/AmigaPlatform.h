@@ -45,6 +45,8 @@ namespace nCine::Backends
 		/** @brief Opens the OS libraries, runs the performance probe; `false` is fatal for the caller */
 		static bool Initialize();
 		static void Shutdown();
+		/** @brief Returns `true` once Ctrl-C has been sent to the process (Shell or `Break`), and clears it */
+		static bool BreakRequested();
 
 		/** @brief EClock rate in ticks per second (~709379 PAL / ~715909 NTSC), as read by @ref Initialize() */
 		static std::uint32_t TimerFrequency();

@@ -241,6 +241,7 @@ if(NOT DEDICATED_SERVER AND NOT NCINE_BUILD_LIBRETRO)
 		)
 		list(APPEND SOURCES
 			${NCINE_SOURCE_DIR}/nCine/Backends/Amiga/AmigaPlatform.cpp
+			${NCINE_SOURCE_DIR}/nCine/Backends/Amiga/AmigaGlTrace.cpp
 			${NCINE_SOURCE_DIR}/nCine/Backends/Amiga/AmigaInputManager.cpp
 			${NCINE_SOURCE_DIR}/nCine/Backends/Amiga/AmigaGfxDevice.cpp
 			${NCINE_SOURCE_DIR}/nCine/Backends/Amiga/AmigaLibcCompat.c

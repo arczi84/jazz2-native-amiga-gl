@@ -18,6 +18,13 @@
 #include <cmath>
 #include <cstring>
 
+#if defined(WITH_AMIGA) && defined(AMIGA_SHARED_MINIGL)
+namespace nCine::Backends::AmigaGlTrace
+{
+	void EndOfFrame(int rasterWidth, int rasterHeight, int logicalWidth, int logicalHeight);
+}
+#endif
+
 namespace nCine::RHI::LegacyGL
 {
 	namespace
@@ -961,6 +968,14 @@ namespace nCine::RHI::LegacyGL
 		if (_maxTextureSize > MaxTextureDimension) {
 			_maxTextureSize = MaxTextureDimension;
 		}
+		// NCINE_MAX_TEXTURE_SIZE lowers the limit further, for drivers that report more than they handle
+		// well and ignore their own override (MiniGLV3D 29.1 answers 2048 whatever MINIGL_MAX_TEXTURE_SIZE says)
+		if (const char* maxOverride = std::getenv("NCINE_MAX_TEXTURE_SIZE")) {
+			const std::int32_t value = std::atoi(maxOverride);
+			if (value >= 64 && value < _maxTextureSize) {
+				_maxTextureSize = value;
+			}
+		}
 
 		// Whether a texture may keep its own dimensions. Legacy GL is not required to sample a
 		// non-power-of-two one at all, and where it cannot, every page is padded up - which costs real
@@ -1204,6 +1219,9 @@ namespace nCine::RHI::LegacyGL
 			}
 		}
 
+#if defined(WITH_AMIGA) && defined(AMIGA_SHARED_MINIGL)
+		nCine::Backends::AmigaGlTrace::EndOfFrame(_rasterWidth, _rasterHeight, _logicalWidth, _logicalHeight);
+#endif
 		// A frame always ends on the screen, and the next one re-emits its projection anyway
 		appliedTarget = nullptr;
 		appliedTargetValid = false;
@@ -1294,9 +1312,16 @@ namespace nCine::RHI::LegacyGL
 			glClearColor(_clearColor.R, _clearColor.G, _clearColor.B, _clearColor.A);
 		}
 		// A colour-only target has no depth or stencil attachment, so asking for those would be an error
+		// This backend never enables GL_DEPTH_TEST (2D only, see InitializeGl), so the depth buffer is never read
+		// and clearing it is wasted work. On MiniGLV3D 29.1 it is also harmful: a full depth clear in the same
+		// frame as a render-target copy-back (glReadPixels) breaks every later read-back and leaves the window
+		// white once the drawable is 1024 wide and 569+ tall. MiniGLV3D 27.6 is fine; reproducer in
+		// tools/mglsizetest. So on Amiga the depth bit is dropped altogether.
+#if !defined(AMIGA_SHARED_MINIGL)
 		if ((flags & ClearFlags::Depth) == ClearFlags::Depth && _currentRenderTarget == nullptr) {
 			mask |= GL_DEPTH_BUFFER_BIT;
 		}
+#endif
 		if ((flags & ClearFlags::Stencil) == ClearFlags::Stencil && _currentRenderTarget == nullptr) {
 			mask |= GL_STENCIL_BUFFER_BIT;
 		}

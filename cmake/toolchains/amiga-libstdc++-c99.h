@@ -27,6 +27,10 @@
 // the only place a missing libc declaration can be restored for all of them at once.
 extern "C" size_t strnlen(const char* s, size_t maxlen);
 
+// Toolchains from v16.2-rc18 on configure libstdc++ with the complete C99 `<cmath>`
+// (_GLIBCXX_USE_C99_MATH_TR1 defined), which already declares all of the following.
+#include <bits/c++config.h>
+#if !defined(_GLIBCXX_USE_C99_MATH_TR1)
 namespace std {
 	using ::copysign;
 	using ::log2;
@@ -73,6 +77,7 @@ namespace std {
 	inline long double fmin(long double x, long double y) { return ::fmin(double(x), double(y)); }
 	inline long double fmax(long double x, long double y) { return ::fmax(double(x), double(y)); }
 }
+#endif // !_GLIBCXX_USE_C99_MATH_TR1
 
 #endif
 

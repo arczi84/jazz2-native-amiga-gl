@@ -32,7 +32,17 @@ namespace Death { namespace IO {
 		/** @{ @name Constants */
 
 		/** @brief Default buffer size for file access */
+#if defined(DEATH_TARGET_AMIGAOS)
+		// AmigaDOS Read() has a high fixed cost per call (filesystem handler round trip), so fewer, larger
+		// transfers make the cache conversion and level loading noticeably faster
+#	if defined(AMIGA_FILE_BUFFER)
+		static constexpr std::int32_t DefaultBufferSize = AMIGA_FILE_BUFFER;
+#	else
+		static constexpr std::int32_t DefaultBufferSize = 65536;
+#	endif
+#else
 		static constexpr std::int32_t DefaultBufferSize = 8192;
+#endif
 
 		/** @} */
 

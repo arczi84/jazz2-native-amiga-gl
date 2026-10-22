@@ -365,7 +365,15 @@ namespace Death { namespace IO {
 #endif
 
 		/** @brief Opens a file stream with specified access mode */
+#if defined(DEATH_TARGET_AMIGAOS)
+#	if defined(AMIGA_FILE_BUFFER)
+		static std::unique_ptr<Stream> Open(Containers::StringView path, FileAccess mode, std::int32_t bufferSize = AMIGA_FILE_BUFFER);
+#	else
+		static std::unique_ptr<Stream> Open(Containers::StringView path, FileAccess mode, std::int32_t bufferSize = 65536);
+#	endif
+#else
 		static std::unique_ptr<Stream> Open(Containers::StringView path, FileAccess mode, std::int32_t bufferSize = 8192);
+#endif
 
 #	if defined(DEATH_TARGET_ANDROID) || defined(DEATH_TARGET_APPLE) || defined(DEATH_TARGET_UNIX) || (defined(DEATH_TARGET_WINDOWS) && !defined(DEATH_TARGET_WINDOWS_RT)) || defined(DOXYGEN_GENERATING_OUTPUT)
 		/**
