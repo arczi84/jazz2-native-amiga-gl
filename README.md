@@ -14,6 +14,19 @@
 <hr/>
 
 
+## Amiga release 1.2
+
+The Amiga release 1.2 (11 October 2026) uses MiniGL v29.1 (dispatch ABI 5)
+and is built with AmigaDev GCC 16.2 rc15. It fixes slow first-launch conversion
+of The Secret Files, cinematic sound-list byte order, and Amiga volume paths.
+Cache revision 38 automatically rebuilds caches made by older versions.
+
+Copy the contents of your installed original game directory, including its
+subdirectories, into `Source` beside `Jazz2.bin`. For GOG, `Anims.j2a` and
+`Data.j2d` must be directly in `Source`, alongside the levels, tilesets,
+episodes and music. Start the supplied `Jazz2` icon and let the first run
+prepare `Cache`. Original game data is not included in the release.
+
 ## Introduction
 Jazz² Resurrection is reimplementation of the game **Jazz Jackrabbit 2** released in 1998. Supports various versions of the game (Shareware Demo, Holiday Hare '98, The Secret Files and Christmas Chronicles). Also, it partially supports some features of JJ2+ extension and MLLE. This repository contains fully rewritten game in C++ with better performance and many improvements. Further information can be found [here](https://de4th.dev/jazz2/).
 

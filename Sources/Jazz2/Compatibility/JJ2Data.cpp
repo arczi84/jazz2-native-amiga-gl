@@ -127,9 +127,18 @@ namespace Jazz2::Compatibility
 		std::int32_t itemCount = item.Size / sizeof(SoundFXList);
 		std::int32_t itemRealCount = 0;
 		std::int32_t sampleCount = 0;
-		for (std::int32_t i = 0; i < itemCount; i++) {
+		auto readSfx = [&item](std::int32_t index) {
 			SoundFXList sfx;
-			std::memcpy(&sfx, &item.Blob[i * sizeof(SoundFXList)], sizeof(SoundFXList));
+			std::memcpy(&sfx, &item.Blob[index * sizeof(SoundFXList)], sizeof(sfx));
+			// Data.j2d stores these records in little-endian order on every platform.
+			sfx.Frame = Memory::AsLE(sfx.Frame);
+			sfx.Sample = Memory::AsLE(sfx.Sample);
+			sfx.Volume = Memory::AsLE(sfx.Volume);
+			sfx.Panning = Memory::AsLE(sfx.Panning);
+			return sfx;
+		};
+		for (std::int32_t i = 0; i < itemCount; i++) {
+			SoundFXList sfx = readSfx(i);
 			if (sfx.Frame == UINT32_MAX) {
 				break;
 			}
@@ -158,8 +167,7 @@ namespace Jazz2::Compatibility
 
 		so.WriteValueAsLE<std::uint16_t>(itemRealCount);
 		for (std::int32_t i = 0; i < itemRealCount; i++) {
-			SoundFXList sfx;
-			std::memcpy(&sfx, &item.Blob[i * sizeof(SoundFXList)], sizeof(SoundFXList));
+			SoundFXList sfx = readSfx(i);
 					
 			so.WriteVariableUint32(sfx.Frame);
 

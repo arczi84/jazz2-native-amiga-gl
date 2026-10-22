@@ -90,6 +90,13 @@ using namespace Jazz2::Multiplayer;
 
 /** @brief @ref Death::Containers::StringView from @ref NCINE_VERSION */
 #define NCINE_VERSION_s DEATH_PASTE(NCINE_VERSION, _s)
+
+#if defined(DEATH_TARGET_AMIGAOS)
+// Workbench and the AmigaOS Version command scan this tag independently of
+// the upstream version used by the engine and its saved-data formats.
+__attribute__((used)) static const char AmigaReleaseVersion[] =
+	"\0$VER: Jazz2 1.2 (11.10.2026)\r\n";
+#endif
 /** @brief @ref Death::Containers::StringView from @ref NCINE_PROTOCOL_VERSION */
 #define NCINE_PROTOCOL_VERSION_s DEATH_PASTE(NCINE_PROTOCOL_VERSION, _s)
 

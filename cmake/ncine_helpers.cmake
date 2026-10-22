@@ -680,7 +680,6 @@ function(ncine_apply_compiler_options target)
 			else()
 				target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-O3>)
 			endif()
-			target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-funsafe-loop-optimizations -ftree-loop-if-convert-stores>)
 
 			if(NCINE_AUTOVECTORIZATION_REPORT)
 				target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-fopt-info-vec-optimized>)

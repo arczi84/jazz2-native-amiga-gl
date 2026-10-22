@@ -130,6 +130,15 @@ using namespace Death::Containers;
 using namespace Death::Containers::Literals;
 
 namespace Death { namespace IO {
+	static bool EndsWithPathSeparator(StringView path)
+	{
+		const char last = path[path.size() - 1];
+#if defined(DEATH_TARGET_AMIGAOS) || defined(DEATH_TARGET_AMIGAOS4) || defined(DEATH_TARGET_MORPHOS)
+		// The colon itself separates an Amiga volume/assign from its contents.
+		if (last == ':') return true;
+#endif
+		return last == '/' || last == '\\';
+	}
 //###==##====#=====--==~--~=~- --- -- -  -  -   -
 
 #if defined(DEATH_TARGET_WINDOWS)
@@ -803,8 +812,8 @@ namespace Death { namespace IO {
 					String absPath = GetAbsolutePath(path);
 					std::size_t pathLength = absPath.size();
 					std::memcpy(_path, absPath.data(), pathLength);
-					if (_path[pathLength - 1] == '/' || _path[pathLength - 1] == '\\') {
-						_path[pathLength - 1] = '/';
+					if (EndsWithPathSeparator(absPath)) {
+						if (_path[pathLength - 1] != ':') _path[pathLength - 1] = '/';
 						_path[pathLength] = '\0';
 						_fileNamePart = _path + pathLength;
 					} else {
@@ -1181,7 +1190,7 @@ namespace Death { namespace IO {
 		}
 #	endif
 
-		if (first[firstSize - 1] == '/' || first[firstSize - 1] == '\\') {
+		if (EndsWithPathSeparator(first)) {
 			// Path has trailing separator
 			return first + second;
 		} else {
@@ -1213,7 +1222,7 @@ namespace Death { namespace IO {
 
 			resultSize += pathSize;
 
-			if (i + 1 < count && paths[i][pathSize - 1] != '/' && paths[i][pathSize - 1] != '\\') {
+			if (i + 1 < count && !EndsWithPathSeparator(paths[i])) {
 				resultSize++;
 			}
 		}
@@ -1229,7 +1238,7 @@ namespace Death { namespace IO {
 			std::memcpy(&result[resultSize], paths[i].data(), pathSize);
 			resultSize += pathSize;
 
-			if (i + 1 < count && paths[i][pathSize - 1] != '/' && paths[i][pathSize - 1] != '\\') {
+			if (i + 1 < count && !EndsWithPathSeparator(paths[i])) {
 #if defined(DEATH_TARGET_WINDOWS)
 				result[resultSize] = '\\';
 #else

@@ -14,7 +14,9 @@
 
 #if defined(AMIGA_SHARED_MINIGL)
 #	include <proto/minigl.h>
-#	include <clib/minigl_open_protos.h>
+#	if __has_include(<clib/minigl_open_protos.h>)
+#		include <clib/minigl_open_protos.h>
+#	endif
 #endif
 
 #include <exec/execbase.h>

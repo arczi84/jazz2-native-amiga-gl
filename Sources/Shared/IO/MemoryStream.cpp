@@ -115,7 +115,10 @@ namespace Death { namespace IO {
 		if (bytesToWrite > 0 && (_mode == AccessMode::Writable || _mode == AccessMode::Growable)) {
 			if (_mode == AccessMode::Growable && _size < _pos + bytesToWrite) {
 				_size = _pos + bytesToWrite;
-				arrayResize(_data, Containers::NoInit, _size);
+				// Image encoders append individual bytes. Grow geometrically instead of
+				// reallocating and copying the entire stream for every byte after its
+				// initial capacity is exhausted (especially costly with Amiga libnix).
+				arrayAppend(_data, Containers::NoInit, std::size_t(_size) - _data.size());
 			}
 
 			bytesWritten = (_pos + bytesToWrite > _size ? (_size - _pos) : bytesToWrite);

@@ -1,0 +1,16 @@
+Echo "GCC 16 RC7 soft ABI"
+Abi-16r7-s-O2
+Echo "GCC 16 RC7 hard ABI"
+Abi-16r7-h-O2
+Echo "GCC 6.5 soft ABI"
+Abi-65-s-O2
+Echo "GCC 6.5 hard ABI"
+Abi-65-h-O2
+Echo "GCC 16 RC7 soft collision tree"
+Tree-16r7-s-O2 1000
+Echo "GCC 16 RC7 hard collision tree"
+Tree-16r7-h-O2 1000
+Echo "GCC 6.5 soft collision tree"
+Tree-65-s-O2 1000
+Echo "GCC 6.5 hard collision tree"
+Tree-65-h-O2 1000

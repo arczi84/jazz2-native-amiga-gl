@@ -128,15 +128,19 @@ elseif(NCINE_PREFERRED_RHI STREQUAL "LegacyGL")
 		# the link line together with the SDL 1.2 build that opens the GL context.
 		set(MGL_V12_SDK "/mnt/d/dev/Pistorm3D/Pistorm3D_v12" CACHE PATH "MiniGL v12 SDK")
 		set(SDL_MGL_V12 "/mnt/d/dev/Pistorm3D/tests/sdl-stormmesa-window/libSDL-mgl-v12.a" CACHE FILEPATH "SDL 1.2 built against MiniGL v12")
+		set(MGL_IMPORT_LIBRARY "${MGL_V12_SDK}/libminigl_dispatch.a" CACHE FILEPATH "MiniGL dispatch import library matching the selected SDK")
 		target_compile_definitions(${NCINE_APP} PRIVATE "AMIGA_SHARED_MINIGL" "GL_GLEXT_LEGACY")
 		target_include_directories(${NCINE_APP} PRIVATE
 			"${MGL_V12_SDK}/include"
 			"/mnt/d/dev/Pistorm3D/libSDL12-mgl/include")
 		target_link_libraries(${NCINE_APP} PRIVATE
-			"-Wl,--start-group" "${SDL_MGL_V12}" "${MGL_V12_SDK}/libminigl_dispatch.a" "-Wl,--end-group")
-		# This SDL build carries its own GfxBase/LowLevelBase in .bss, as does AmigaPlatform; both are
-		# the same library base opened once at startup, so let the linker keep one of them
-		target_link_options(${NCINE_APP} PRIVATE "-Wl,--allow-multiple-definition")
+			"-Wl,--start-group" "${SDL_MGL_V12}" "${MGL_IMPORT_LIBRARY}" "-Wl,--end-group")
+		# Legacy SDL archives define the same library-base symbols as the engine.
+		# Rebuilt archives with private base names can link without suppressing collisions.
+		option(SDL_MGL_PRIVATE_BASES "SDL MiniGL archive owns separate Amiga library bases" OFF)
+		if(NOT SDL_MGL_PRIVATE_BASES)
+			target_link_options(${NCINE_APP} PRIVATE "-Wl,--allow-multiple-definition")
+		endif()
 	elseif(PLATFORM_AMIGAOS4)
 		# MiniGL, the SDK's fixed-function OpenGL over Warp3D. Its stub library has to follow SDL2 on the
 		# link line (SDL2's OS4 video driver calls into it to create the context), which is what listing
