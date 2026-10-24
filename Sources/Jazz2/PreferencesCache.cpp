@@ -1496,6 +1496,14 @@ namespace
 		if (MaxFps == UseVsync && !nCine::Backends::AmigaPlatform::LoadVSyncPreference(true)) {
 			MaxFps = UnlimitedFps;
 		}
+		// Only the scanlines are offered on ogles2 (see RescaleModeSection); a heavier mode saved earlier would
+		// drop the game to a few FPS, so it falls back to pixel-perfect
+		{
+			const RescaleMode type = (ActiveRescaleMode & RescaleMode::TypeMask);
+			if (type != RescaleMode::None && type != RescaleMode::CrtScanlines) {
+				ActiveRescaleMode = RescaleMode::None | (ActiveRescaleMode & RescaleMode::UseAntialiasing);
+			}
+		}
 		// NCINE_RESCALE=<n>: test a rescale mode without editing the saved settings (RescaleMode values)
 		if (const char* rescale = std::getenv("NCINE_RESCALE")) {
 			ActiveRescaleMode = (RescaleMode)std::atoi(rescale);

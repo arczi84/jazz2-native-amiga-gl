@@ -54,6 +54,12 @@ namespace Jazz2::UI::Menu
 		// (see RHI_CAP_HEAVY_RESCALE_SHADERS). Omitting them here is all that is needed: a value stored by
 		// another backend needs no fallback, because UpscaleRenderPass already falls back to the plain sprite
 		// shader whenever the mode resolves to no program, which is exactly the pixel-perfect mode.
+#if defined(WITH_AMIGA_OGLES2)
+		// The PiStorm's V3D runs the pixel-art scalers (CleanEdge, HQ2x, 3xBRZ, SABR) and the heavier CRT masks
+		// at a few FPS over a 1080p screen - only the scanlines are cheap enough to offer
+		// TRANSLATORS: Menu item in Options > Graphics > Rescale Mode section
+		add(RescaleMode::CrtScanlines, _("CRT Scanlines"));
+#else
 #if defined(RHI_CAP_HEAVY_RESCALE_SHADERS)
 		add(RescaleMode::CleanEdge, "CleanEdge"_s);
 #endif
@@ -72,6 +78,7 @@ namespace Jazz2::UI::Menu
 		// TRANSLATORS: Menu item in Options > Graphics > Rescale Mode section
 		add(RescaleMode::Monochrome, _("Monochrome"));
 #	endif
+#endif
 #endif
 
 		list->SetSelectedIndex(selectedIndex);
