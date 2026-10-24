@@ -7,6 +7,8 @@
 #include "../Base/Algorithms.h"
 #include "../tracy_opengl.h"
 
+#include <cstdlib>
+
 namespace nCine
 {
 	RenderQueue::RenderQueue()
@@ -75,7 +77,13 @@ namespace nCine
 #if defined(DEATH_DEBUG)
 		static char debugString[128];
 #endif
+#if defined(WITH_AMIGA_OGLES2)
+		// NCINE_NOBATCH: draw every sprite on its own, for A/B measurements of the ES2 batching
+		static const bool noBatch = (std::getenv("NCINE_NOBATCH") != nullptr);
+		const bool batchingEnabled = theApplication().GetRenderingSettings().batchingEnabled && !noBatch;
+#else
 		const bool batchingEnabled = theApplication().GetRenderingSettings().batchingEnabled;
+#endif
 
 		// Sorting the queues with the relevant orders
 		sort(_opaqueQueue.begin(), _opaqueQueue.end(), descendingOrder);
@@ -120,7 +128,13 @@ namespace nCine
 #if defined(DEATH_DEBUG) && defined(NCINE_PROFILING)
 		static char debugString[128];
 #endif
+#if defined(WITH_AMIGA_OGLES2)
+		// NCINE_NOBATCH: draw every sprite on its own, for A/B measurements of the ES2 batching
+		static const bool noBatch = (std::getenv("NCINE_NOBATCH") != nullptr);
+		const bool batchingEnabled = theApplication().GetRenderingSettings().batchingEnabled && !noBatch;
+#else
 		const bool batchingEnabled = theApplication().GetRenderingSettings().batchingEnabled;
+#endif
 		SmallVectorImpl<RenderCommand*>* opaques = batchingEnabled ? &_opaqueBatchedQueue : &_opaqueQueue;
 		SmallVectorImpl<RenderCommand*>* transparents = batchingEnabled ? &_transparentBatchedQueue : &_transparentQueue;
 

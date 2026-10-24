@@ -34,6 +34,7 @@
 #include <IO/Compression/DeflateStream.h>
 
 #include <jsoncpp/json.h>
+#include <cstdlib>
 
 using namespace Death::IO::Compression;
 using namespace Jazz2::Tiles;
@@ -2232,6 +2233,38 @@ namespace Jazz2
 			return nullptr;
 		}
 
+#if defined(WITH_AMIGA_OGLES2) && !defined(DISABLE_RESCALE_SHADERS)
+		if (_precompiledShaders[(std::int32_t)shader] == nullptr && !_isHeadless) {
+			const char* name = nullptr;
+			const ShaderCompiler::Program* program = nullptr;
+			switch (shader) {
+				case PrecompiledShader::ResizeHQ2x: name = "ResizeHQ2x"; program = &ShadersGen::ResizeHQ2x; break;
+				case PrecompiledShader::Resize3xBrz: name = "Resize3xBrz"; program = &ShadersGen::Resize3xBrz; break;
+				case PrecompiledShader::ResizeCrtScanlines: name = "ResizeCrtScanlines"; program = &ShadersGen::ResizeCrtScanlines; break;
+				case PrecompiledShader::ResizeCrtShadowMask: name = "ResizeCrtShadowMask"; program = &ShadersGen::ResizeCrtShadowMask; break;
+				case PrecompiledShader::ResizeCrtApertureGrille: name = "ResizeCrtApertureGrille"; program = &ShadersGen::ResizeCrtApertureGrille; break;
+#	if defined(RHI_CAP_HEAVY_RESCALE_SHADERS)
+				case PrecompiledShader::ResizeMonochrome: name = "ResizeMonochrome"; program = &ShadersGen::ResizeMonochrome; break;
+				case PrecompiledShader::ResizeSabr: name = "ResizeSabr"; program = &ShadersGen::ResizeSabr; break;
+				case PrecompiledShader::ResizeCleanEdge: name = "ResizeCleanEdge"; program = &ShadersGen::ResizeCleanEdge; break;
+#	endif
+				default: break;
+			}
+			// Tried once only: GetShader() runs every frame, and a program the compiler rejects (or the
+			// compiler is missing) must not be compiled again each time - the caller then falls back to no
+			// rescale shader
+			static bool attempted[(std::int32_t)PrecompiledShader::Count];
+			if (program != nullptr && !attempted[(std::int32_t)shader]) {
+				attempted[(std::int32_t)shader] = true;
+				std::unique_ptr<Shader> compiled = CompileShader(name, *program);
+				if (compiled != nullptr && compiled->IsLinked()) {
+					_precompiledShaders[(std::int32_t)shader] = std::move(compiled);
+				} else {
+					LOGW("Shader \"{}\" could not be compiled - rescaling without it", name);
+				}
+			}
+		}
+#endif
 		return _precompiledShaders[(std::int32_t)shader].get();
 	}
 
@@ -2348,7 +2381,9 @@ namespace Jazz2
 		}
 #endif
 
-#if !defined(DISABLE_RESCALE_SHADERS)
+#if !defined(DISABLE_RESCALE_SHADERS) && !defined(WITH_AMIGA_OGLES2)
+		// (ogles2 compiles these on first use instead, see GetShader() - its on-target compiler takes minutes
+		// over the big ones, and only the selected rescale mode is ever bound)
 		_precompiledShaders[(std::int32_t)PrecompiledShader::ResizeHQ2x] = CompileShader("ResizeHQ2x", ShadersGen::ResizeHQ2x);
 		_precompiledShaders[(std::int32_t)PrecompiledShader::Resize3xBrz] = CompileShader("Resize3xBrz", ShadersGen::Resize3xBrz);
 		_precompiledShaders[(std::int32_t)PrecompiledShader::ResizeCrtScanlines] = CompileShader("ResizeCrtScanlines", ShadersGen::ResizeCrtScanlines);
@@ -2370,11 +2405,28 @@ namespace Jazz2
 #endif
 
 		_precompiledShaders[(std::int32_t)PrecompiledShader::Transition] = CompileShader("Transition", ShadersGen::Transition);
+#if defined(WITH_AMIGA_OGLES2) && !defined(DISABLE_RESCALE_SHADERS)
+		// NCINE_DUMPSHADERS (collecting sources for the offline compiler): every rescale program, not only the selected one
+		if (std::getenv("NCINE_DUMPSHADERS") != nullptr) {
+			for (PrecompiledShader resize : { PrecompiledShader::ResizeHQ2x, PrecompiledShader::Resize3xBrz, PrecompiledShader::ResizeCrtScanlines,
+					PrecompiledShader::ResizeCrtShadowMask, PrecompiledShader::ResizeCrtApertureGrille
+#	if defined(RHI_CAP_HEAVY_RESCALE_SHADERS)
+					, PrecompiledShader::ResizeMonochrome, PrecompiledShader::ResizeSabr, PrecompiledShader::ResizeCleanEdge
+#	endif
+				}) {
+				GetShader(resize);
+			}
+		}
+#endif
 		_precompiledShaders[(std::int32_t)PrecompiledShader::TouchCircle] = CompileShader("TouchCircle", ShadersGen::TouchCircle);
 	}
 
 	std::unique_ptr<Shader> ContentResolver::CompileShader(const char* shaderName, const ShaderCompiler::Program& program, const char* variantName, Shader::Introspection introspection)
 	{
+#if defined(WITH_AMIGA_OGLES2)
+		// Shows which program the on-target compiler is busy with (the first start compiles them all)
+		LOGI("Compiling shader \"{}\"{}{}", shaderName, variantName != nullptr && variantName[0] != '\0' ? " variant " : "", variantName != nullptr ? variantName : "");
+#endif
 		const ShaderCompiler::ProgramVariant* variant = nullptr;
 		if (variantName == nullptr || variantName[0] == '\0') {
 			// The base variant is unnamed (Name "") and is always Variants[0]

@@ -8,6 +8,9 @@
 #include "../../../../Main.h"
 
 #include <Containers/StringView.h>
+#if defined(WITH_AMIGA_OGLES2)
+#	include <Containers/String.h>
+#endif
 
 using namespace Death::Containers;
 
@@ -90,5 +93,12 @@ namespace nCine::RHI::GL
 
 		GLuint _glHandle;
 		Status _status;
+
+#if defined(WITH_AMIGA_OGLES2)
+	public:
+		/** @brief The exact text passed to glShaderSource(), kept only while NCINE_DUMPSHADERS is set */
+		String DumpSource;
+		bool IsVertex = false;
+#endif
 	};
 }

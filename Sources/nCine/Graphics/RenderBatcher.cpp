@@ -67,6 +67,13 @@ namespace nCine
 			// Split point if last command or split condition
 			if (i == srcQueue.size() - 1 || shouldSplit) {
 				const RHI::ShaderProgram* batchedShader = RenderResources::GetBatchedShader(prevCommand->GetMaterial().GetShaderProgram());
+#if defined(WITH_AMIGA_OGLES2)
+				// Only the sprite programs batch on ES2: the batched mesh programs carry an integer mesh index in
+				// the vertex data, which an ES2 attribute cannot read (see RHI_CAP_BATCHING in RhiFwd.h)
+				if (batchedShader != nullptr && !batchedShader->HasInstanceIndexAttribute()) {
+					batchedShader = nullptr;
+				}
+#endif
 				if (batchedShader && (endSplit - lastSplit) >= minBatchSize) {
 					// Split point for the maximum batch size
 					while (lastSplit < endSplit) {
@@ -223,7 +230,12 @@ namespace nCine
 		const std::uint32_t maxIndexDataSize = RenderResources::GetBuffersManager().Specs(RenderBuffersManager::BufferTypes::ElementArray).maxSize;
 		// Sum the amount of VBO and IBO memory required by the batch
 		it = start;
+#if defined(WITH_AMIGA_OGLES2)
+		// Only sprites batch on ES2, and their single attribute is the static corner stream (no geometry to copy)
+		const bool refShaderHasAttributes = false;
+#else
 		const bool refShaderHasAttributes = (refShader->GetAttributeCount() > 0);
+#endif
 		while (it != nextStart) {
 			std::uint32_t vertexDataSize = 0;
 			std::uint32_t numIndices = (*it)->GetGeometry().GetIndexCount();
@@ -270,7 +282,12 @@ namespace nCine
 		float* destVtx = nullptr;
 		std::uint16_t* destIdx = nullptr;
 
+#if defined(WITH_AMIGA_OGLES2)
+		// aQuadCorner + aInstanceIndex come from the static batched corner stream, not from the batch geometry
+		const bool batchedShaderHasAttributes = false;
+#else
 		const bool batchedShaderHasAttributes = (batchedShader->GetAttributeCount() > 1);
+#endif
 		if (batchedShaderHasAttributes) {
 			const std::uint32_t numFloats = instancesVertexDataSize / sizeof(float);
 			destVtx = batchCommand->GetGeometry().AcquireVertexPointer(numFloats, NumFloatsVertexFormat + 1); // aligned to vertex format with index

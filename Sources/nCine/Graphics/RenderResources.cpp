@@ -45,6 +45,9 @@ namespace nCine
 
 #if defined(RHI_GL_PROFILE_ES2)
 	std::unique_ptr<RHI::Buffer> RenderResources::_quadCornerVbo;
+#if defined(WITH_AMIGA_OGLES2)
+	std::unique_ptr<RHI::Buffer> RenderResources::_batchedQuadCornerVbo;
+#endif
 #endif
 
 	std::unique_ptr<RHI::ShaderProgram> RenderResources::_defaultShaderPrograms[DefaultShaderProgramsCount];
@@ -237,6 +240,26 @@ namespace nCine
 			_quadCornerVbo->BufferData(sizeof(quadCorners), quadCorners, BufferUsage::StaticDraw);
 			_quadCornerVbo->SetObjectLabel("QuadCornerVBO");
 		}
+#	if defined(WITH_AMIGA_OGLES2)
+		// Batched sprites draw 6 vertices (two triangles) per instance; the corners are the ones the original
+		// "gl_VertexID % 6" formulas give, after the ES2 rewrite (see VertexIdRewrite.h), plus the instance index
+		if (_batchedQuadCornerVbo == nullptr) {
+			static constexpr std::uint32_t MaxInstances = 64;
+			static const float corners[6][2] = { { 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f } };
+			std::unique_ptr<float[]> data = std::make_unique<float[]>(MaxInstances * 6 * 3);
+			float* dst = data.get();
+			for (std::uint32_t instance = 0; instance < MaxInstances; instance++) {
+				for (std::uint32_t v = 0; v < 6; v++) {
+					*dst++ = corners[v][0];
+					*dst++ = corners[v][1];
+					*dst++ = float(instance);
+				}
+			}
+			_batchedQuadCornerVbo = std::make_unique<RHI::Buffer>(BufferTarget::Vertex);
+			_batchedQuadCornerVbo->BufferData(MaxInstances * 6 * 3 * sizeof(float), data.get(), BufferUsage::StaticDraw);
+			_batchedQuadCornerVbo->SetObjectLabel("BatchedQuadCornerVBO");
+		}
+#	endif
 #endif
 
 		ShaderLoad shadersToLoad[] = {

@@ -47,6 +47,16 @@ namespace nCine::Backends
 		static void Shutdown();
 		/** @brief Returns `true` once Ctrl-C has been sent to the process (Shell or `Break`), and clears it */
 		static bool BreakRequested();
+#if defined(WITH_AMIGA_OGLES2)
+		/** @brief Hands the GL context and its window over to be released at process exit, after every static GL object */
+		static void DeferGlTeardown(void* context, Window* window);
+		/** @brief Switches the vertical-blank wait of the current ogles2 context on or off, right away */
+		static void ApplyVSync(bool enable);
+		/** @brief The saved VSync choice (ENV:Jazz2/VSync, "0" = off), or `defaultValue` when none is saved */
+		static bool LoadVSyncPreference(bool defaultValue);
+		/** @brief Saves the VSync choice to ENV: and ENVARC: */
+		static void SaveVSyncPreference(bool enable);
+#endif
 
 		/** @brief EClock rate in ticks per second (~709379 PAL / ~715909 NTSC), as read by @ref Initialize() */
 		static std::uint32_t TimerFrequency();

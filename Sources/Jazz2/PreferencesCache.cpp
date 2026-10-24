@@ -1,4 +1,9 @@
 ﻿#include "PreferencesCache.h"
+#if defined(WITH_AMIGA_OGLES2)
+#	include "../nCine/Backends/Amiga/AmigaPlatform.h"
+#endif
+
+#include <cstdlib>
 #include "ContentResolver.h"
 #include "LevelHandler.h"
 #include "Input/ControlScheme.h"
@@ -1483,6 +1488,17 @@ namespace
 				IsStandalone = true;
 			}
 #	endif
+		}
+#endif
+#if defined(WITH_AMIGA_OGLES2)
+		// The VSync choice from Options > Graphics, kept in ENVARC:Jazz2/VSync (the config file has no field for it);
+		// "/no-vsync" on the command line still wins
+		if (MaxFps == UseVsync && !nCine::Backends::AmigaPlatform::LoadVSyncPreference(true)) {
+			MaxFps = UnlimitedFps;
+		}
+		// NCINE_RESCALE=<n>: test a rescale mode without editing the saved settings (RescaleMode values)
+		if (const char* rescale = std::getenv("NCINE_RESCALE")) {
+			ActiveRescaleMode = (RescaleMode)std::atoi(rescale);
 		}
 #endif
 	}

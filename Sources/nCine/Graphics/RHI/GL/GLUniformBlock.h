@@ -73,6 +73,27 @@ namespace nCine::RHI::GL
 		/** @brief Sets the binding index of the block, skipping the GL call if it is unchanged */
 		void SetBlockBinding(GLuint blockBinding);
 
+#if defined(WITH_AMIGA_OGLES2)
+		/** @brief One field of a batched instance array split into its own loose uniform array (ES2) */
+		struct FlatInstanceField
+		{
+			char Name[32];
+			GLint Location;
+			GLenum Type;
+			/** @brief std140 offset of the field inside one instance */
+			std::uint32_t Offset;
+			/** @brief Floats per element (16 mat4, 4 vec4, 3 vec3, 2 vec2, 1 float) */
+			std::uint32_t Floats;
+		};
+		static constexpr std::uint32_t MaxFlatInstanceFields = 8;
+
+		/** @brief The fields of the flattened instance array, empty when the block is not one */
+		FlatInstanceField FlatFields[MaxFlatInstanceFields];
+		std::uint32_t FlatFieldCount = 0;
+		/** @brief std140 stride of one instance in the host block data */
+		std::uint32_t FlatStride = 0;
+
+#endif
 	private:
 		// Max number of discoverable uniforms per block
 		static const std::int32_t MaxNumBlockUniforms = 16;

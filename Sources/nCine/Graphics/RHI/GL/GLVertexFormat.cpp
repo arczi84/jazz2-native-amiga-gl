@@ -67,10 +67,19 @@ namespace nCine::RHI::GL
 
 	void GLVertexFormat::Define()
 	{
+#if defined(WITH_AMIGA_OGLES2)
+		// Emulated VAOs (see GLVertexArrayObject.cpp): the enabled arrays are global state, so the ones the
+		// previous format enabled and this one does not use are switched off below
+		static std::uint32_t enabledArrays = 0;
+		std::uint32_t newEnabledArrays = 0;
+#endif
 		for (std::uint32_t i = 0; i < MaxAttributes; i++) {
 			if (_attributes[i]._enabled) {
 				_attributes[i]._vbo->Bind();
 				glEnableVertexAttribArray(_attributes[i]._index);
+#if defined(WITH_AMIGA_OGLES2)
+				newEnabledArrays |= (1u << _attributes[i]._index);
+#endif
 
 #if (defined(RHI_GL_PROFILE_ES) && !GL_ES_VERSION_3_2) || defined(DEATH_TARGET_EMSCRIPTEN)
 				const GLubyte* initialPointer = reinterpret_cast<const GLubyte*>(_attributes[i]._pointer);
@@ -105,6 +114,14 @@ namespace nCine::RHI::GL
 #endif
 			}
 		}
+#if defined(WITH_AMIGA_OGLES2)
+		for (std::uint32_t stale = (enabledArrays & ~newEnabledArrays), index = 0; stale != 0; stale >>= 1, index++) {
+			if ((stale & 1u) != 0) {
+				glDisableVertexAttribArray(index);
+			}
+		}
+		enabledArrays = newEnabledArrays;
+#endif
 
 		if (_ibo) {
 			_ibo->Bind();
@@ -155,6 +172,11 @@ namespace nCine::RHI::GL
 		// If indices are the same then check attributes too
 		if (areEqual) {
 			for (std::uint32_t i = 0; i < _attributes.size(); i++) {
+				// Most of the slots are unused - skip them without the full attribute comparison (on a 68k
+				// this loop runs for every draw, see RenderVaoPool::BindVao)
+				if (!other._attributes[i]._enabled && !_attributes[i]._enabled) {
+					continue;
+				}
 				if (other._attributes[i] != _attributes[i]) {
 					areEqual = false;
 					break;

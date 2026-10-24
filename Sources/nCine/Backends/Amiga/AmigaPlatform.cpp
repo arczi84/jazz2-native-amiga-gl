@@ -12,6 +12,9 @@
 #include <cstdlib>
 #include <cstring>
 
+#if defined(WITH_AMIGA_OGLES2)
+#	include <proto/ogles2.h>
+#endif
 #if defined(AMIGA_SHARED_MINIGL)
 #	include <proto/minigl.h>
 #	if __has_include(<clib/minigl_open_protos.h>)
@@ -22,7 +25,12 @@
 #include <exec/execbase.h>
 #include <exec/memory.h>
 #include <proto/exec.h>
+#include <proto/intuition.h>
+#if defined(WITH_AMIGA_OGLES2)
+#	include <libraries/ogles2_dispatch.h>
+#endif
 #include <proto/dos.h>
+#include <dos/var.h>
 
 #if defined(WITH_AMMX)
 #	include "../../Graphics/RHI/Software/SwAmmxOps.h"
@@ -105,6 +113,73 @@ namespace nCine::Backends
 		}
 	}
 
+#if defined(WITH_AMIGA_OGLES2)
+	// Every gl* call jumps through ogles2's dispatch table with the current context, and the engine still
+	// releases GL objects after the display is gone - static textures and caches are destroyed only when
+	// the process exits. So the context, its window and the library stay until then: this runs from
+	// atexit(), registered right after OGLES2Open(), i.e. after the destructors of everything created later.
+	static void* _deferredGlContext = nullptr;
+	static struct Window* _deferredGlWindow = nullptr;
+
+	static void Ogles2NoOp()
+	{
+	}
+
+	static void ReleaseOgles2AtExit()
+	{
+		if (_deferredGlContext != nullptr) {
+			aglDestroyContext(_deferredGlContext);
+			_deferredGlContext = nullptr;
+		}
+		if (_deferredGlWindow != nullptr && IntuitionBase != nullptr) {
+			CloseWindow(_deferredGlWindow);
+			_deferredGlWindow = nullptr;
+		}
+		OGLES2Close();
+		// Global GL objects (constructed before main(), so destroyed after this handler) still delete
+		// their names: point the dispatch at no-ops instead of the closed library
+		static void* noOpDispatch[sizeof(struct OGLES2Dispatch) / sizeof(void*)];
+		for (auto& entry : noOpDispatch) {
+			entry = reinterpret_cast<void*>(&Ogles2NoOp);
+		}
+		OGLES2Dispatch = reinterpret_cast<const struct OGLES2Dispatch*>(noOpDispatch);
+		if (IntuitionBase != nullptr) {
+			CloseLibrary(reinterpret_cast<struct Library*>(IntuitionBase));
+			IntuitionBase = nullptr;
+		}
+	}
+
+	void AmigaPlatform::ApplyVSync(bool enable)
+	{
+		struct TagItem tags[] = {
+			{ OGLES2_CCT_VSYNC, ULONG(enable ? TRUE : FALSE) },
+			{ TAG_DONE, 0 }
+		};
+		aglSetParams2(tags);
+	}
+
+	bool AmigaPlatform::LoadVSyncPreference(bool defaultValue)
+	{
+		char value[8];
+		if (GetVar(reinterpret_cast<CONST_STRPTR>("Jazz2/VSync"), reinterpret_cast<STRPTR>(value), sizeof(value), GVF_GLOBAL_ONLY) > 0) {
+			return (value[0] != '0');
+		}
+		return defaultValue;
+	}
+
+	void AmigaPlatform::SaveVSyncPreference(bool enable)
+	{
+		SetVar(reinterpret_cast<CONST_STRPTR>("Jazz2/VSync"), reinterpret_cast<CONST_STRPTR>(enable ? "1" : "0"), 1,
+			GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+	}
+
+	void AmigaPlatform::DeferGlTeardown(void* context, Window* window)
+	{
+		_deferredGlContext = context;
+		_deferredGlWindow = window;
+	}
+#endif
+
 	bool AmigaPlatform::Initialize()
 	{
 		IntuitionBase = reinterpret_cast<struct IntuitionBase*>(OpenLibrary(reinterpret_cast<CONST_STRPTR>("intuition.library"), 39));
@@ -130,6 +205,16 @@ namespace nCine::Backends
 		}
 		LOGI("minigl.library opened");
 		nCine::Backends::AmigaGlTrace::Install();
+#endif
+#if defined(WITH_AMIGA_OGLES2)
+		// The shader backend reaches the V3D GPU through ogles2.library: every gl* call dispatches through the
+		// table OGLES2Open() fills in, so nothing GL may run before it
+		if (!OGLES2Open()) {
+			std::fprintf(stderr, "nCine: cannot open ogles2.library (this build renders through OpenGL|ES 2.0 on a PiStorm with a Pi 4)\n");
+			return false;
+		}
+		LOGI("ogles2.library opened");
+		std::atexit(ReleaseOgles2AtExit);
 #endif
 
 		// The whole rendering path presents into an RTG chunky framebuffer through the CyberGraphX API,
@@ -254,10 +339,13 @@ namespace nCine::Backends
 			CloseLibrary(reinterpret_cast<struct Library*>(GfxBase));
 			GfxBase = nullptr;
 		}
+#if !defined(WITH_AMIGA_OGLES2)
+		// (the ogles2 build closes Intuition in ReleaseOgles2AtExit(), after the deferred window)
 		if (IntuitionBase != nullptr) {
 			CloseLibrary(reinterpret_cast<struct Library*>(IntuitionBase));
 			IntuitionBase = nullptr;
 		}
+#endif
 	}
 
 	std::uint32_t AmigaPlatform::TimerFrequency()

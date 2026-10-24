@@ -78,6 +78,8 @@ namespace nCine
 		static constexpr char ColorAttributeName[] = "aColor";
 		/** @brief OpenGL|ES 2.0 profile: the static per-vertex quad corner replacing gl_VertexID synthesis */
 		static constexpr char QuadCornerAttributeName[] = "aQuadCorner";
+		/** @brief Instance index attribute of the batched ES2 sprite programs */
+		static constexpr char InstanceIndexAttributeName[] = "aInstanceIndex";
 
 		/** @} */
 

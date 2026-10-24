@@ -4,6 +4,8 @@
 #include "../../../ServiceLocator.h"
 #include "../../../tracy_opengl.h"
 
+#include <memory>
+
 #ifndef GL_TEXTURE_SWIZZLE_R
 #	define GL_TEXTURE_SWIZZLE_R 0x8E42
 #endif
@@ -149,6 +151,9 @@ namespace nCine::RHI::GL
 		GLint internalFormat;
 		GLenum externalFormat, dataType;
 		GLTextureFormat::Resolve(format, bgr, internalFormat, externalFormat, dataType);
+		#if defined(RHI_GL_PROFILE_ES2) && defined(DEATH_TARGET_BIG_ENDIAN)
+		data = ReverseRgbaIfNeeded(format, bgr, width, height, data);
+#endif
 		glTexImage2D(_target, level, internalFormat, width, height, 0, externalFormat, dataType, data);
 		GL_LOG_ERRORS();
 	}
@@ -160,6 +165,9 @@ namespace nCine::RHI::GL
 		GLint internalFormat;
 		GLenum externalFormat, dataType;
 		GLTextureFormat::Resolve(format, bgr, internalFormat, externalFormat, dataType);
+		#if defined(RHI_GL_PROFILE_ES2) && defined(DEATH_TARGET_BIG_ENDIAN)
+		data = ReverseRgbaIfNeeded(format, bgr, width, height, data);
+#endif
 		glTexSubImage2D(_target, level, xoffset, yoffset, width, height, externalFormat, dataType, data);
 		GL_LOG_ERRORS();
 	}
@@ -262,6 +270,13 @@ namespace nCine::RHI::GL
 		// non-identity swizzle the engine uses is the palette pipeline's (R,G,B,G) on RG8 index textures, and
 		// GLTextureFormat maps RG8 to LUMINANCE_ALPHA on both profiles, which natively samples (L,L,L,A) -
 		// identical for the channels the shaders read (.r/.a)
+		//
+		// The palettes are the exception: on a big-endian host they declare (A,B,G,R) because their uint32
+		// entries are laid out reversed in memory (see ContentResolver::ConfigurePaletteTextureChannels), so
+		// that one swizzle is applied to the texels on upload instead
+#	if defined(RHI_GL_PROFILE_ES2) && defined(DEATH_TARGET_BIG_ENDIAN)
+		_reverseRgba = (r == SwizzleChannel::Alpha && g == SwizzleChannel::Blue && b == SwizzleChannel::Green && a == SwizzleChannel::Red);
+#	endif
 		static_cast<void>(r); static_cast<void>(g); static_cast<void>(b); static_cast<void>(a);
 #else
 		// Channels are set individually because GL_TEXTURE_SWIZZLE_RGBA (a single glTexParameteriv) is desktop-only
@@ -272,6 +287,29 @@ namespace nCine::RHI::GL
 		TexParameteri(GL_TEXTURE_SWIZZLE_A, SwizzleChannelToGL(a));
 #endif
 	}
+
+#if defined(RHI_GL_PROFILE_ES2) && defined(DEATH_TARGET_BIG_ENDIAN)
+	const void* GLTexture::ReverseRgbaIfNeeded(PixelFormat format, bool bgr, std::int32_t width, std::int32_t height, const void* data)
+	{
+		if (!_reverseRgba || data == nullptr || format != PixelFormat::RGBA8 || bgr) {
+			return data;
+		}
+
+		// Palettes are at most a few hundred rows of 256 entries, so a scratch copy per upload is cheap
+		static std::unique_ptr<std::uint32_t[]> scratch;
+		static std::size_t scratchSize = 0;
+		const std::size_t count = std::size_t(width) * std::size_t(height);
+		if (scratchSize < count) {
+			scratch = std::make_unique<std::uint32_t[]>(count);
+			scratchSize = count;
+		}
+		const std::uint32_t* src = static_cast<const std::uint32_t*>(data);
+		for (std::size_t i = 0; i < count; i++) {
+			scratch[i] = __builtin_bswap32(src[i]);
+		}
+		return scratch.get();
+	}
+#endif
 
 	void GLTexture::SetMaxLevel(std::int32_t maxLevel)
 	{

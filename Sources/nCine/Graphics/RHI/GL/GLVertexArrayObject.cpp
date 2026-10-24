@@ -1,7 +1,25 @@
 #include "GLVertexArrayObject.h"
 #include "GLDebug.h"
 
-#if defined(RHI_GL_PROFILE_ES2) && !defined(DEATH_TARGET_VITA)
+#if defined(WITH_AMIGA_OGLES2)
+// ogles2.library (classic Amiga) has no GL_OES_vertex_array_object. Vertex array objects are emulated: the
+// handles are just numbers, binding does nothing, and the VAO pool is one entry deep (AppConfiguration), so
+// every change of vertex format goes through GLVertexFormat::Define(), which then specifies all attributes
+// again and disables the ones the previous format left enabled.
+namespace nCine::RHI::GL
+{
+	namespace
+	{
+		GLuint _nextEmulatedVao = 1;
+		void EmulatedGenVertexArrays(GLsizei n, GLuint* arrays) { for (GLsizei i = 0; i < n; i++) arrays[i] = _nextEmulatedVao++; }
+		void EmulatedDeleteVertexArrays(GLsizei, const GLuint*) {}
+		void EmulatedBindVertexArray(GLuint) {}
+	}
+}
+#	define glGenVertexArrays EmulatedGenVertexArrays
+#	define glDeleteVertexArrays EmulatedDeleteVertexArrays
+#	define glBindVertexArray EmulatedBindVertexArray
+#elif defined(RHI_GL_PROFILE_ES2) && !defined(DEATH_TARGET_VITA)
 // Vertex array objects are not ES 2.0 core - this profile relies on GL_OES_vertex_array_object, whose entry
 // points carry the OES suffix on a true ES2 context. Being extension functions, they are not necessarily
 // *exported* by the client library either (ANGLE exports them, Mesa's libGLESv2 does not), so they are
@@ -46,7 +64,7 @@ namespace nCine::RHI::GL
 	GLVertexArrayObject::GLVertexArrayObject()
 		: _glHandle(0)
 	{
-#if defined(RHI_GL_PROFILE_ES2) && !defined(DEATH_TARGET_VITA)
+#if defined(RHI_GL_PROFILE_ES2) && !defined(DEATH_TARGET_VITA) && !defined(WITH_AMIGA_OGLES2)
 		ResolveVertexArrayEntryPoints();
 #endif
 		glGenVertexArrays(1, &_glHandle);

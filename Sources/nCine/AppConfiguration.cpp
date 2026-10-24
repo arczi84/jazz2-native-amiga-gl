@@ -37,7 +37,12 @@ namespace nCine
 		vboSize(64 * 1024),
 		iboSize(8 * 1024),
 #endif
+#if defined(WITH_AMIGA_OGLES2)
+		// ogles2 has no vertex array objects; they are emulated with a pool of one (GLVertexArrayObject.cpp)
+		vaoPoolSize(1),
+#else
 		vaoPoolSize(16),
+#endif
 		renderCommandPoolSize(32),
 #if defined(WITH_IMGUI)
 		withDebugOverlay(false),

@@ -85,6 +85,14 @@ namespace nCine::RHI::GL
 		GLenum _type;
 		GLint _offset;
 		char _name[MaxNameLength];
+
+#if defined(WITH_AMIGA_OGLES2)
+	public:
+		/** @brief Size of the last value uploaded to this loose uniform, 0 when unknown (see GLUniformBlockCache) */
+		mutable std::uint32_t UploadedSize = 0;
+		/** @brief The last value uploaded, so an unchanged one is not sent again */
+		mutable GLubyte UploadedData[64];
+#endif
 	};
 
 }

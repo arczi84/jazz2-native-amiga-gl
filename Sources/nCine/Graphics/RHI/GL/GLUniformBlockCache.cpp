@@ -2,6 +2,7 @@
 #include "GLUniformBlock.h"
 #include "../../../../Main.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -105,6 +106,41 @@ namespace nCine::RHI::GL
 #if defined(RHI_GL_PROFILE_ES2)
 	void GLUniformBlockCache::CommitAsLooseUniforms()
 	{
+#if defined(WITH_AMIGA_OGLES2)
+		// A batched instance block split per field (GLShaderProgram, FlattenInstanceArray): gather each field of
+		// the filled instances out of the std140 host data into a tight array and upload it with one call
+		if (_uniformBlock != nullptr && _uniformBlock->FlatFieldCount > 0 && _dataPointer != nullptr) {
+			const std::uint32_t stride = _uniformBlock->FlatStride;
+			const std::uint32_t instanceCount = (stride > 0 ? std::uint32_t(_usedSize) / stride : 0);
+			if (instanceCount == 0) {
+				return;
+			}
+			static std::vector<GLfloat> scratch;
+			for (std::uint32_t f = 0; f < _uniformBlock->FlatFieldCount; f++) {
+				const GLUniformBlock::FlatInstanceField& field = _uniformBlock->FlatFields[f];
+				if (field.Location < 0) {
+					continue;
+				}
+				scratch.resize(std::size_t(instanceCount) * field.Floats);
+				GLfloat* dst = scratch.data();
+				const GLubyte* src = _dataPointer + field.Offset;
+				for (std::uint32_t k = 0; k < instanceCount; k++) {
+					std::memcpy(dst, src, field.Floats * sizeof(GLfloat));
+					dst += field.Floats;
+					src += stride;
+				}
+				const GLsizei count = GLsizei(instanceCount);
+				switch (field.Type) {
+					case GL_FLOAT_MAT4:	glUniformMatrix4fv(field.Location, count, GL_FALSE, scratch.data()); break;
+					case GL_FLOAT_VEC4:	glUniform4fv(field.Location, count, scratch.data()); break;
+					case GL_FLOAT_VEC3:	glUniform3fv(field.Location, count, scratch.data()); break;
+					case GL_FLOAT_VEC2:	glUniform2fv(field.Location, count, scratch.data()); break;
+					case GL_FLOAT:		glUniform1fv(field.Location, count, scratch.data()); break;
+				}
+			}
+			return;
+		}
+#endif
 		// Each member cache points into the host-side block buffer at the member's offset (SetDataPointer);
 		// on ES2 the member is a real loose uniform, so push it directly with the matching glUniform* call
 		// (the location was resolved in GLShaderProgram::ImportReflection). Mirrors GLUniformCache::CommitValue.
@@ -153,6 +189,23 @@ namespace nCine::RHI::GL
 				data = scratch.data();
 			}
 
+#if defined(WITH_AMIGA_OGLES2)
+			// GL keeps a uniform's value in its program, so a member whose bytes did not change since the last
+			// upload to this program needs no call - most draws repeat the camera and many sprite values, and
+			// every ogles2 call costs CPU time on the 68k
+			{
+				const std::uint32_t bytes = std::uint32_t(count * rowsPerElement * tightRowBytes);
+				// NCINE_NOOPT: upload every time, for A/B measurements
+				static const bool noOpt = (std::getenv("NCINE_NOOPT") != nullptr);
+				if (!noOpt && bytes <= sizeof(uniform->UploadedData)) {
+					if (uniform->UploadedSize == bytes && std::memcmp(uniform->UploadedData, data, bytes) == 0) {
+						continue;
+					}
+					std::memcpy(uniform->UploadedData, data, bytes);
+					uniform->UploadedSize = bytes;
+				}
+			}
+#endif
 			const GLfloat* asFloat = reinterpret_cast<const GLfloat*>(data);
 			const GLint* asInt = reinterpret_cast<const GLint*>(data);
 			switch (uniform->GetGLType()) {

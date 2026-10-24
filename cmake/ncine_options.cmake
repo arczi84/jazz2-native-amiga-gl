@@ -162,10 +162,15 @@ if(NOT NCINE_BUILD_ANDROID AND NOT WINDOWS_PHONE AND NOT WINDOWS_STORE AND NOT N
 		# on has texturing or blending hardware - RTG cards accelerate at most blits and fills - so unlike
 		# the fixed-function consoles there is no hardware pipeline to drive: the Software RHI, which the
 		# desktop and Vita builds already ship, IS the renderer here (see Docs/AmigaPortDesign.md).
-		set(NCINE_PREFERRED_RHI "Software" CACHE STRING "Rendering backend on Amiga: Software or LegacyGL")
-		set_property(CACHE NCINE_PREFERRED_RHI PROPERTY STRINGS "Software;LegacyGL")
-		if(NOT NCINE_PREFERRED_RHI MATCHES "^(Software|LegacyGL)$")
-			message(FATAL_ERROR "Invalid NCINE_PREFERRED_RHI \"${NCINE_PREFERRED_RHI}\" on Amiga (expected Software)")
+		#
+		# "OpenGL" is the shader backend on ogles2.library (OpenGL|ES 2.0 on the PiStorm's V3D GPU, through
+		# Emu68): the ES2 profile, presented into an Intuition window by the native Amiga backend.
+		set(NCINE_PREFERRED_RHI "Software" CACHE STRING "Rendering backend on Amiga: Software, LegacyGL or OpenGL (ogles2)")
+		set_property(CACHE NCINE_PREFERRED_RHI PROPERTY STRINGS "Software;LegacyGL;OpenGL")
+		if(NCINE_PREFERRED_RHI STREQUAL "OpenGL")
+			set(_NCINE_RHI_GL_PROFILE_FORCED "ES2")
+		elseif(NOT NCINE_PREFERRED_RHI MATCHES "^(Software|LegacyGL)$")
+			message(FATAL_ERROR "Invalid NCINE_PREFERRED_RHI \"${NCINE_PREFERRED_RHI}\" on Amiga (expected Software, LegacyGL or OpenGL)")
 		endif()
 	elseif(PLATFORM_N64)
 		# Nintendo 64 (the project's own cmake/toolchains/n64.cmake toolchain file sets PLATFORM_N64): the

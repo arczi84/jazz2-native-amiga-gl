@@ -33,7 +33,14 @@ if(NCINE_PREFERRED_RHI STREQUAL "OpenGL")
 			target_compile_definitions(${NCINE_APP} PRIVATE "WITH_ANGLE")
 		endif()
 
-		if(VITA)
+		if(PLATFORM_AMIGA)
+			# Classic Amiga: ogles2.library. Its SDK's GLES2 headers and <proto/ogles2.h> (every gl* call is an
+			# inline through the library's dispatch table) and the small libogles2.a import library.
+			set(OGLES2_SDK "/mnt/d/dev/wipeout/ext/ogles2-sdk/ogles2-sdk-1.3" CACHE PATH "ogles2.library SDK (include/, lib/)")
+			target_compile_definitions(${NCINE_APP} PRIVATE "WITH_AMIGA_OGLES2")
+			target_include_directories(${NCINE_APP} PRIVATE "${OGLES2_SDK}/include")
+			target_link_libraries(${NCINE_APP} PRIVATE "${OGLES2_SDK}/lib/libogles2.a")
+		elseif(VITA)
 			# PS Vita renders through vitaGL, a static OpenGL|ES 2.0 implementation that is linked (together with
 			# its Sce stub libraries) further below. find_package(OpenGLES2) cannot locate it - that module only
 			# probes for GLES2/gl2.h and libGLESv2/libEGL.
@@ -251,8 +258,9 @@ if(NOT DEDICATED_SERVER AND NOT NCINE_BUILD_LIBRETRO)
 		# 68060-safe. binutils' assembler does not know AMMX, so the module is assembled by vasm,
 		# which ships with the amiga-gcc toolchain ("make vasm").
 		find_program(VASM_EXECUTABLE vasmm68k_mot HINTS "$ENV{AMIGA_INST}/bin")
-		# The kernels are scanline routines of the Software RHI; a LegacyGL build has no such renderer
-		if(NCINE_PREFERRED_RHI STREQUAL "LegacyGL")
+		# The kernels are scanline routines of the Software RHI; the LegacyGL and OpenGL (ogles2) builds have no
+		# such renderer
+		if(NCINE_PREFERRED_RHI STREQUAL "LegacyGL" OR NCINE_PREFERRED_RHI STREQUAL "OpenGL")
 			set(VASM_EXECUTABLE "")
 		endif()
 		if(VASM_EXECUTABLE)

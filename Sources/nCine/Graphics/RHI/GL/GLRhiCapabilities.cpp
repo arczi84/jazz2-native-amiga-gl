@@ -37,15 +37,22 @@ namespace nCine::RHI::GL
 		_infoStrings.apiVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
 		_infoStrings.shadingLanguageVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &_intValues[(std::int32_t)IntValues::MaxTextureSize]);
-		glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &_intValues[(std::int32_t)IntValues::MaxTextureImageUnits]);
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxTextureSize]));
+		glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxTextureImageUnits]));
 #if defined(RHI_GL_PROFILE_ES2)
 		// ES2 has no uniform buffer objects, MRT or the related glGet enums (all ES 3.0) - querying them would
 		// raise GL_INVALID_ENUM and leave the values at 0 (a zero UNIFORM_BUFFER_OFFSET_ALIGNMENT would even
 		// divide-by-zero in RenderBuffersManager). Publish safe synthetic values for the pipeline code that reads
 		// them before its ES2 arms skip the UBO work, and log the real ES2 uniform-vector limits instead
+#	if defined(WITH_AMIGA_OGLES2)
+		// Sizes the BATCH_SIZE arrays of the flattened batched programs: 4 KB of instances is 36-42 sprites,
+		// well inside the 256 vertex uniform vectors ES2 guarantees once flattened
+		_intValues[(std::int32_t)IntValues::MaxUniformBlockSize] = 4 * 1024;
+		_intValues[(std::int32_t)IntValues::MaxUniformBlockSizeNormalized] = 4 * 1024;
+#	else
 		_intValues[(std::int32_t)IntValues::MaxUniformBlockSize] = 16 * 1024;
 		_intValues[(std::int32_t)IntValues::MaxUniformBlockSizeNormalized] = 16 * 1024;
+#	endif
 		_intValues[(std::int32_t)IntValues::MaxUniformBufferBindings] = 0;
 		_intValues[(std::int32_t)IntValues::MaxVertexUniformBlocks] = 0;
 		_intValues[(std::int32_t)IntValues::MaxFragmentUniformBlocks] = 0;
@@ -59,15 +66,15 @@ namespace nCine::RHI::GL
 		LOGI("GL_MAX_VERTEX_UNIFORM_VECTORS: {}, GL_MAX_FRAGMENT_UNIFORM_VECTORS: {}, GL_MAX_VARYING_VECTORS: {}",
 			maxVertexUniformVectors, maxFragmentUniformVectors, maxVaryingVectors);
 #else
-		glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &_intValues[(std::int32_t)IntValues::MaxUniformBlockSize]);
-		glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &_intValues[(std::int32_t)IntValues::MaxUniformBufferBindings]);
-		glGetIntegerv(GL_MAX_VERTEX_UNIFORM_BLOCKS, &_intValues[(std::int32_t)IntValues::MaxVertexUniformBlocks]);
-		glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &_intValues[(std::int32_t)IntValues::MaxFragmentUniformBlocks]);
-		glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &_intValues[(std::int32_t)IntValues::UniformBufferOffsetAlignment]);
+		glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxUniformBlockSize]));
+		glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxUniformBufferBindings]));
+		glGetIntegerv(GL_MAX_VERTEX_UNIFORM_BLOCKS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxVertexUniformBlocks]));
+		glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxFragmentUniformBlocks]));
+		glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::UniformBufferOffsetAlignment]));
 #	if !defined(DEATH_TARGET_EMSCRIPTEN) && !(defined(DEATH_TARGET_APPLE) && defined(DEATH_TARGET_ARM)) && (defined(RHI_GL_PROFILE_CORE) || GL_ES_VERSION_3_1)
-		glGetIntegerv(GL_MAX_VERTEX_ATTRIB_STRIDE, &_intValues[(std::int32_t)IntValues::MaxVertexAttribStride]);
+		glGetIntegerv(GL_MAX_VERTEX_ATTRIB_STRIDE, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxVertexAttribStride]));
 #	endif
-		glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &_intValues[(std::int32_t)IntValues::MaxColorAttachments]);
+		glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::MaxColorAttachments]));
 
 		// MAX_UNIFORM_BLOCK_SIZE is sometimes not reported correctly, so try to adjust it here
 		NormalizeUniformBlockSize();
@@ -109,15 +116,15 @@ namespace nCine::RHI::GL
 #if !defined(DEATH_TARGET_VITA)
 #	if defined(RHI_GL_PROFILE_ES) && !defined(DEATH_TARGET_EMSCRIPTEN) && !defined(DEATH_TARGET_SWITCH) && !defined(DEATH_TARGET_UNIX)
 		if (HasExtension(Extensions::OesGetProgramBinary)) {
-			glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS_OES, &_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats]);
+			glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS_OES, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats]));
 			DEATH_ASSERT(_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats] <= MaxProgramBinaryFormats);
-			glGetIntegerv(GL_PROGRAM_BINARY_FORMATS_OES, _programBinaryFormats);
+			glGetIntegerv(GL_PROGRAM_BINARY_FORMATS_OES, reinterpret_cast<GLint*>(_programBinaryFormats));
 		} else
 #	endif
 		if (HasExtension(Extensions::ArbGetProgramBinary)) {
-			glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats]);
+			glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, reinterpret_cast<GLint*>(&_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats]));
 			DEATH_ASSERT(_intValues[(std::int32_t)IntValues::NumProgramBinaryFormats] <= MaxProgramBinaryFormats);
-			glGetIntegerv(GL_PROGRAM_BINARY_FORMATS, _programBinaryFormats);
+			glGetIntegerv(GL_PROGRAM_BINARY_FORMATS, reinterpret_cast<GLint*>(_programBinaryFormats));
 		}
 #endif
 

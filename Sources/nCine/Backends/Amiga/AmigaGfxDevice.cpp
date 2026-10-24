@@ -12,13 +12,19 @@
 #include "../../Graphics/RHI/Rhi.h"
 #include "../../../Main.h"
 
+#include <cstdlib>
 #include <cstring>
+#include <cstdio>
+#include <ctime>
 
 #if defined(WITH_RHI_LEGACYGL)
 #	include <SDL.h>
 #	include "../../../Jazz2/PreferencesCache.h"
 #	include <proto/minigl.h>
 #	include <mgl/gl.h>
+#elif defined(WITH_AMIGA_OGLES2)
+#	include "../../../Jazz2/PreferencesCache.h"
+#	include <proto/ogles2.h>
 #endif
 
 #include <exec/exec.h>
@@ -95,7 +101,7 @@ namespace nCine::Backends
 
 		_drawableWidth = _width;
 		_drawableHeight = _height;
-#if defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2)
 		_isFullscreen = _openedFullscreen;
 #else
 		_isFullscreen = true;
@@ -104,7 +110,7 @@ namespace nCine::Backends
 		_currentVideoMode.width = std::uint32_t(_width);
 		_currentVideoMode.height = std::uint32_t(_height);
 		_currentVideoMode.refreshRate = 60.0f;
-#if defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2)
 		_currentVideoMode.redBits = 8;
 		_currentVideoMode.greenBits = 8;
 		_currentVideoMode.blueBits = 8;
@@ -117,7 +123,7 @@ namespace nCine::Backends
 		updateMonitors();
 		initDeviceViewport();
 
-#if !defined(WITH_RHI_LEGACYGL)
+#if !defined(WITH_RHI_LEGACYGL) && !defined(WITH_AMIGA_OGLES2)
 		LOGI("Video mode initialized: {}x{} 16-bit RTG ({} preset)", _width, _height,
 			performanceClass == AmigaPlatform::PerformanceClass::Ultra ? "Ultra"
 				: performanceClass == AmigaPlatform::PerformanceClass::High ? "High"
@@ -216,6 +222,101 @@ namespace nCine::Backends
 			LOGI("Video mode initialized: {}x{} 32-bit MiniGL/Warp3D{}", width, height, fullscreen ? " fullscreen" : "");
 			return true;
 		}
+#elif defined(WITH_AMIGA_OGLES2)
+		// ogles2.library (OpenGL|ES 2.0 on the PiStorm's V3D): the shader backend renders into a context
+		// that ogles2 presents into an Intuition window of ours on the Workbench, or - fullscreen - into a
+		// screen it opens itself in an exact 32-bit RTG mode of the requested size
+		std::int32_t width = requestedWidth;
+		std::int32_t height = requestedHeight;
+		if (Jazz2::PreferencesCache::PreferredWidth > 0 && Jazz2::PreferencesCache::PreferredHeight > 0) {
+			width = Jazz2::PreferencesCache::PreferredWidth;
+			height = Jazz2::PreferencesCache::PreferredHeight;
+		}
+		if (width <= 0 || height <= 0) {
+			width = 960;
+			height = 540;
+		}
+
+		ULONG errorCode = 0;
+		bool fullscreen = false;
+		// NCINE_WINDOWED: test the window path without touching the saved settings
+		if (Jazz2::PreferencesCache::EnableFullscreen && std::getenv("NCINE_WINDOWED") == nullptr) {
+			ULONG modeId = INVALID_ID;
+			while ((modeId = NextDisplayInfo(modeId)) != ULONG(INVALID_ID)) {
+				if (IsCyberModeID(modeId) && GetCyberIDAttr(CYBRIDATTR_PIXFMT, modeId) == PIXFMT_BGRA32 &&
+					GetCyberIDAttr(CYBRIDATTR_WIDTH, modeId) == ULONG(width) &&
+					GetCyberIDAttr(CYBRIDATTR_HEIGHT, modeId) == ULONG(height)) {
+					break;
+				}
+			}
+			if (modeId != ULONG(INVALID_ID)) {
+				struct Window* inputWindow = nullptr;
+				LOGI("ogles2: creating a fullscreen context in mode 0x{:x} ({}x{})", std::uint32_t(modeId), width, height);
+				_glContext = aglCreateContextTags2(&errorCode,
+					OGLES2_CCT_MODEID, modeId,
+					OGLES2_CCT_DEPTH, 24,
+					OGLES2_CCT_STENCIL, 8,
+					OGLES2_CCT_VSYNC, ULONG(_displayMode.hasVSync() ? TRUE : FALSE),
+					OGLES2_CCT_PISTORM_GET_WINDOW, ULONG(reinterpret_cast<std::uintptr_t>(&inputWindow)),
+					TAG_DONE);
+				if (_glContext != nullptr && inputWindow != nullptr) {
+					// ogles2's backdrop window on its screen: switch its messages on for the input manager
+					ModifyIDCMP(inputWindow, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE);
+					AmigaPlatform::GameWindow = inputWindow;
+					fullscreen = true;
+				} else {
+					LOGW("ogles2 fullscreen {}x{} failed (error {}) - opening a window instead", width, height, errorCode);
+					if (_glContext != nullptr) {
+						aglDestroyContext(_glContext);
+						_glContext = nullptr;
+					}
+				}
+			} else {
+				LOGW("No {}x{} 32-bit BGRA RTG screen mode (add one in Picasso96Mode) - opening a window instead", width, height);
+			}
+		}
+
+		if (!fullscreen) {
+			_window = OpenWindowTags(nullptr,
+				WA_InnerWidth, ULONG(width),
+				WA_InnerHeight, ULONG(height),
+				WA_Title, ULONG(reinterpret_cast<std::uintptr_t>(_screenTitle.data())),
+				WA_ScreenTitle, ULONG(reinterpret_cast<std::uintptr_t>(_screenTitle.data())),
+				WA_DragBar, TRUE,
+				WA_DepthGadget, TRUE,
+				WA_CloseGadget, TRUE,
+				WA_Activate, TRUE,
+				WA_RMBTrap, TRUE,
+				WA_ReportMouse, TRUE,
+				WA_SimpleRefresh, TRUE,
+				WA_NoCareRefresh, TRUE,
+				WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_CLOSEWINDOW,
+				TAG_DONE);
+			if (_window == nullptr) {
+				LOGE("OpenWindowTags({}x{}) on the Workbench failed", width, height);
+				return false;
+			}
+			LOGI("ogles2: creating a context in a {}x{} window", width, height);
+			_glContext = aglCreateContextTags2(&errorCode,
+				OGLES2_CCT_WINDOW, ULONG(reinterpret_cast<std::uintptr_t>(_window)),
+				OGLES2_CCT_DEPTH, 24,
+				OGLES2_CCT_STENCIL, 8,
+				OGLES2_CCT_VSYNC, ULONG(_displayMode.hasVSync() ? TRUE : FALSE),
+				TAG_DONE);
+			if (_glContext == nullptr) {
+				LOGE("aglCreateContext2() failed with error {} (2 = no V3D GPU, 4 = the screen is not 32-bit)", errorCode);
+				return false;
+			}
+			AmigaPlatform::GameWindow = _window;
+		}
+
+		LOGI("ogles2: context created");
+		aglMakeCurrent(_glContext);
+		_openedFullscreen = fullscreen;
+		_width = width;
+		_height = height;
+		LOGI("Video mode initialized: {}x{} 32-bit ogles2{}", width, height, fullscreen ? " fullscreen" : "");
+		return true;
 #else
 		// Walk the display database for RTG modes at 2 bytes per pixel and pick by logical fidelity
 		// within the preset's budget; the requested size (usually unset on this platform) only raises
@@ -363,6 +464,11 @@ namespace nCine::Backends
 		// The GL path never opened an Intuition screen of its own (see openDisplay), so the window and
 		// screen handles below are null and only SDL has anything to give back
 		SDL_Quit();
+#elif defined(WITH_AMIGA_OGLES2)
+		// Released at process exit instead - GL objects are still deleted after this (see AmigaPlatform)
+		AmigaPlatform::DeferGlTeardown(_glContext, _window);
+		_glContext = nullptr;
+		_window = nullptr;
 #endif
 
 		if (_window != nullptr) {
@@ -416,6 +522,11 @@ namespace nCine::Backends
 #endif
 			SDL_GL_SwapBuffers();
 		}
+#elif defined(WITH_AMIGA_OGLES2)
+		// The shader backend submits as it draws; the swap hands the frame to ogles2, which shows it while
+		// the CPU already builds the next one
+		RHI::Device::PresentFrame();
+		aglSwapBuffers();
 #else
 		// Render any draws the tile renderer deferred this frame into the screen buffer before reading it,
 		// and drop unconsumed lighting entries - the same sequence as the SDL software present
@@ -423,11 +534,34 @@ namespace nCine::Backends
 		RHI::Device::EndFrame();
 		presentFramebuffer();
 #endif
+#if defined(WITH_AMIGA_OGLES2) || defined(WITH_RHI_LEGACYGL)
+		// NCINE_FPSLOG: frames per second to the log every 5 s, for comparing the renderers
+		{
+			static std::int32_t fpsLog = -1;
+			static std::uint32_t frames = 0;
+			static std::clock_t start;
+			if (fpsLog < 0) {
+				fpsLog = (std::getenv("NCINE_FPSLOG") != nullptr ? 1 : 0);
+				start = std::clock();
+			}
+			if (fpsLog > 0) {
+				frames++;
+				std::clock_t now = std::clock();
+				if (now - start >= 5 * CLOCKS_PER_SEC) {
+					LOGI("FPS: {:.1f} ({} frames in {} ms)", frames * float(CLOCKS_PER_SEC) / float(now - start), frames,
+						std::int32_t((now - start) * 1000 / CLOCKS_PER_SEC));
+					std::fflush(stdout);
+					frames = 0;
+					start = now;
+				}
+			}
+		}
+#endif
 	}
 
 	void AmigaGfxDevice::presentFramebuffer()
 	{
-#if defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2)
 		// Nothing to present by hand under MiniGL - see update()
 #else
 		const auto fb = RHI::Device::GetScreenFramebuffer();
@@ -659,6 +793,12 @@ namespace nCine::Backends
 		// is what reaches it. SDL 1.2 keeps its own copy of the string.
 		SDL_WM_SetCaption(_screenTitle.data(), _screenTitle.data());
 #endif
+#if defined(WITH_AMIGA_OGLES2)
+		if (_window != nullptr) {
+			SetWindowTitles(_window, reinterpret_cast<STRPTR>(_screenTitle.data()), reinterpret_cast<STRPTR>(_screenTitle.data()));
+			return;
+		}
+#endif
 		if (_window != nullptr) {
 			// (STRPTR)~0 leaves the window's own title alone
 			SetWindowTitles(_window, reinterpret_cast<STRPTR>(~std::uintptr_t(0)), reinterpret_cast<STRPTR>(_screenTitle.data()));
@@ -689,7 +829,7 @@ namespace nCine::Backends
 		_monitors[0].position = Vector2i(0, 0);
 		_monitors[0].scale = Vector2f(1.0f, 1.0f);
 
-#if defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2)
 		// The GL path draws into a window SDL sizes, so the list is not the display database's modes but
 		// the sizes this renderer is willing to open - from the smallest RTG screen up to 1080p. They are
 		// offered in ascending order and the current one is placed first, which is what the options menu

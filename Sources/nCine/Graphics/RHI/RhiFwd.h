@@ -37,9 +37,11 @@
 #define RHI_CAP_SHADERS
 #define RHI_CAP_FRAMEBUFFERS
 #define RHI_CAP_HEAVY_RESCALE_SHADERS
-#if !defined(RHI_GL_PROFILE_ES2)
-// ES2 has no uniform buffer objects to put the instance array in, and the batched programs' ESSL 100 form is
-// not even valid there (a "uint aMeshIndex" integer attribute), so that profile does not batch
+#if !defined(RHI_GL_PROFILE_ES2) || defined(WITH_AMIGA_OGLES2)
+// ES2 has no uniform buffer objects to put the instance array in. The ogles2 build batches sprites anyway:
+// the instance array is split into one loose uniform array per field when the program is loaded (see
+// GLShaderProgram, FlattenInstanceArray) and fed by a static corner + instance-index stream; batched mesh
+// sprites (an integer "aMeshIndex" in the vertex data) stay unbatched there (see RenderBatcher)
 #	define RHI_CAP_BATCHING
 #endif
 

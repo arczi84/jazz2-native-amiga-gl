@@ -127,7 +127,12 @@ namespace nCine
 		bool result = false;
 		RHI::UniformCache* uniform = retrieveUniform(_node->_renderCommand.GetMaterial(), blockName, name);
 		if (uniform != nullptr) {
+#if defined(WITH_AMIGA_OGLES2)
+			// GLint is long on m68k and the GL uniform cache takes GLint, while this API is int32_t (also long there)
+			result = uniform->SetIntVector(reinterpret_cast<const GLint*>(vector));
+#else
 			result = uniform->SetIntVector(vector);
+#endif
 		}
 
 		return result;

@@ -1,4 +1,13 @@
 #include "GLShaderProgram.h"
+
+#if defined(WITH_AMIGA_OGLES2)
+#	include <cstdio>
+#	include <cstring>
+#	include <string>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
 #include "GLShader.h"
 #include "GLDebug.h"
 #include "../../BinaryShaderCache.h"
@@ -15,6 +24,127 @@
 
 namespace nCine::RHI::GL
 {
+#if defined(WITH_AMIGA_OGLES2)
+	namespace
+	{
+		/** @brief Text of a batched ES2 vertex shader's instance array: the "uniform <T> instances[BATCH_SIZE];" line and struct <T> */
+		bool ParseInstanceArray(const std::string& src, std::string& typeName, std::size_t& lineStart, std::size_t& lineEnd,
+			GLUniformBlock::FlatInstanceField* fields, std::uint32_t& fieldCount, std::uint32_t& stride)
+		{
+			const std::size_t decl = src.find(" instances[BATCH_SIZE];");
+			if (decl == std::string::npos) {
+				return false;
+			}
+			lineStart = src.rfind('\n', decl);
+			lineStart = (lineStart == std::string::npos ? 0 : lineStart + 1);
+			lineEnd = src.find('\n', decl);
+			lineEnd = (lineEnd == std::string::npos ? src.size() : lineEnd + 1);
+
+			// "<ws>uniform <T> instances[BATCH_SIZE];"
+			std::size_t p = src.find("uniform ", lineStart);
+			if (p == std::string::npos || p > decl) {
+				return false;
+			}
+			p += 8;
+			typeName = src.substr(p, decl - p);
+			while (!typeName.empty() && (typeName.back() == ' ' || typeName.back() == '\t')) {
+				typeName.pop_back();
+			}
+
+			const std::size_t structPos = src.find("struct " + typeName);
+			if (structPos == std::string::npos) {
+				return false;
+			}
+			const std::size_t open = src.find('{', structPos);
+			const std::size_t close = src.find('}', open);
+			if (open == std::string::npos || close == std::string::npos) {
+				return false;
+			}
+
+			fieldCount = 0;
+			std::uint32_t offset = 0, maxAlign = 16;
+			std::size_t pos = open + 1;
+			while (pos < close) {
+				std::size_t end = src.find('\n', pos);
+				if (end == std::string::npos || end > close) {
+					end = close;
+				}
+				std::string line = src.substr(pos, end - pos);
+				pos = end + 1;
+				const std::size_t comment = line.find("//");
+				if (comment != std::string::npos) {
+					line.resize(comment);
+				}
+				char type[16], name[40];
+				if (std::sscanf(line.c_str(), " %15s %39[A-Za-z0-9_] ;", type, name) != 2) {
+					continue;
+				}
+				std::uint32_t floats, size, align;
+				GLenum glType;
+				if (std::strcmp(type, "mat4") == 0) { floats = 16; size = 64; align = 16; glType = GL_FLOAT_MAT4; }
+				else if (std::strcmp(type, "vec4") == 0) { floats = 4; size = 16; align = 16; glType = GL_FLOAT_VEC4; }
+				else if (std::strcmp(type, "vec3") == 0) { floats = 3; size = 12; align = 16; glType = GL_FLOAT_VEC3; }
+				else if (std::strcmp(type, "vec2") == 0) { floats = 2; size = 8; align = 8; glType = GL_FLOAT_VEC2; }
+				else if (std::strcmp(type, "float") == 0) { floats = 1; size = 4; align = 4; glType = GL_FLOAT; }
+				else { return false; }
+				if (fieldCount >= GLUniformBlock::MaxFlatInstanceFields || std::strlen(name) >= sizeof(fields[0].Name)) {
+					return false;
+				}
+				offset = (offset + align - 1) / align * align;
+				GLUniformBlock::FlatInstanceField& f = fields[fieldCount++];
+				std::strcpy(f.Name, name);
+				f.Location = -1;
+				f.Type = glType;
+				f.Offset = offset;
+				f.Floats = floats;
+				offset += size;
+			}
+			stride = (offset + maxAlign - 1) / maxAlign * maxAlign;
+			return (fieldCount > 0);
+		}
+
+		/**
+		 * @brief Splits the instance array of a batched ES2 vertex shader into one uniform array per field
+		 *
+		 * A uniform array of structs is one location per element and member in ES2, so uploading N instances
+		 * would take 3-5 glUniform calls per sprite. One array per field takes one call per field for the
+		 * whole batch; an accessor rebuilds the struct, so the shader body stays as it was.
+		 */
+		bool FlattenInstanceArray(const std::string& src, std::string& out)
+		{
+			static const char Access[] = "instances[int(aInstanceIndex)]";
+			if (src.find(Access) == std::string::npos) {
+				return false;
+			}
+			std::string typeName;
+			std::size_t lineStart, lineEnd;
+			GLUniformBlock::FlatInstanceField fields[GLUniformBlock::MaxFlatInstanceFields];
+			std::uint32_t fieldCount, stride;
+			if (!ParseInstanceArray(src, typeName, lineStart, lineEnd, fields, fieldCount, stride)) {
+				return false;
+			}
+			static const char* TypeNames[] = { "mat4", "vec4", "vec3", "vec2", "float" };
+			std::string decls;
+			for (std::uint32_t i = 0; i < fieldCount; i++) {
+				const char* typeText = (fields[i].Floats == 16 ? TypeNames[0] : fields[i].Floats == 4 ? TypeNames[1]
+					: fields[i].Floats == 3 ? TypeNames[2] : fields[i].Floats == 2 ? TypeNames[3] : TypeNames[4]);
+				decls += "uniform "; decls += typeText; decls += " instances_"; decls += fields[i].Name; decls += "[BATCH_SIZE];\n";
+			}
+			decls += typeName + " instances_get(int k)\n{\n\t" + typeName + " r;\n";
+			for (std::uint32_t i = 0; i < fieldCount; i++) {
+				decls += "\tr."; decls += fields[i].Name; decls += " = instances_"; decls += fields[i].Name; decls += "[k];\n";
+			}
+			decls += "\treturn r;\n}\n";
+
+			out = src.substr(0, lineStart) + decls + src.substr(lineEnd);
+			for (std::size_t p = out.find(Access); p != std::string::npos; p = out.find(Access, p)) {
+				out.replace(p, sizeof(Access) - 1, "instances_get(int(aInstanceIndex))");
+			}
+			return true;
+		}
+	}
+#endif
+
 	namespace
 	{
 		GLenum UniformTypeToGL(ShaderCompiler::UniformType type)
@@ -162,6 +292,23 @@ namespace nCine::RHI::GL
 	bool GLShaderProgram::AttachShaderFromStringsAndFile(ShaderStage stage, ArrayView<const StringView> strings, StringView filename)
 	{
 		std::unique_ptr<GLShader> shader = std::make_unique<GLShader>(stage == ShaderStage::Vertex ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
+#if defined(WITH_AMIGA_OGLES2)
+		shader->IsVertex = (stage == ShaderStage::Vertex);
+		// Batched ES2 programs: one uniform array per instance field instead of an array of structs
+		std::string flattened;
+		StringView flattenedParts[1];
+		if (stage == ShaderStage::Vertex) {
+			std::string joined;
+			for (StringView part : strings) {
+				joined.append(part.data(), part.size());
+			}
+			if (FlattenInstanceArray(joined, flattened)) {
+				// A named array, not an initializer list: the view must outlive this block
+				flattenedParts[0] = StringView(flattened.data(), flattened.size());
+				strings = flattenedParts;
+			}
+		}
+#endif
 		shader->LoadFromStringsAndFile(strings, filename);
 		glAttachShader(_glHandle, shader->GetGLHandle());
 
@@ -180,6 +327,22 @@ namespace nCine::RHI::GL
 
 	bool GLShaderProgram::Link(Introspection introspection)
 	{
+#if defined(WITH_AMIGA_OGLES2)
+		// NCINE_DUMPSHADERS=<dir>: write each linked program's sources as <n>.vert/<n>.frag, the input of
+		// ogles2's offline compiler (v3dglslc), so a release can ship the binaries
+		if (const char* dumpDir = std::getenv("NCINE_DUMPSHADERS")) {
+			static std::int32_t dumpIndex = 0;
+			dumpIndex++;
+			for (auto& shader : _attachedShaders) {
+				char path[512];
+				std::snprintf(path, sizeof(path), "%s/%03d.%s", dumpDir, dumpIndex, shader->IsVertex ? "vert" : "frag");
+				if (FILE* f = std::fopen(path, "wb")) {
+					std::fwrite(shader->DumpSource.data(), 1, shader->DumpSource.size(), f);
+					std::fclose(f);
+				}
+			}
+		}
+#endif
 		glLinkProgram(_glHandle);
 		return FinalizeAfterLinking(introspection);
 	}
@@ -258,9 +421,17 @@ namespace nCine::RHI::GL
 		std::int32_t cornerLocation = -1;
 		_attributeLocations.contains(Material::QuadCornerAttributeName, cornerLocation);
 		const GLBufferObject* cornerVbo = static_cast<const GLBufferObject*>(RenderResources::GetQuadCornerVbo());
+#	if defined(WITH_AMIGA_OGLES2)
+		std::int32_t instanceLocation = -1;
+		if (_attributeLocations.contains(Material::InstanceIndexAttributeName, instanceLocation)) {
+			cornerVbo = static_cast<const GLBufferObject*>(RenderResources::GetBatchedQuadCornerVbo());
+		}
+#	else
+		const std::int32_t instanceLocation = -1;
+#	endif
 		bool hasBoundAttribute = false;
 		for (std::int32_t location : _attributeLocations) {
-			if (location == cornerLocation) {
+			if (location == cornerLocation || location == instanceLocation) {
 				if (cornerVbo != nullptr) {
 					_vertexFormat[location].setVbo(cornerVbo);
 					_vertexFormat[location].SetBaseOffset(0);
@@ -468,6 +639,33 @@ namespace nCine::RHI::GL
 
 			GLUniformBlock& uniformBlock = _uniformBlocks.emplace_back(_glHandle, b.Name, blockIndex, GLint(dataSize));
 			_uniformBlocksSize += uniformBlock.GetSize();
+#if defined(WITH_AMIGA_OGLES2)
+			// The instance array of a batched program was split per field when it was compiled (see
+			// FlattenInstanceArray) - read the layout from the same ES2 text, which also covers a program
+			// restored from the binary cache without its sources
+			if (b.InstanceStride > 0 && reflection.VsSource100 != nullptr) {
+				const std::string vsSource(reflection.VsSource100);
+				std::string typeName;
+				std::size_t lineStart, lineEnd;
+				std::uint32_t stride = 0;
+				if (vsSource.find("instances[int(aInstanceIndex)]") != std::string::npos &&
+					ParseInstanceArray(vsSource, typeName, lineStart, lineEnd, uniformBlock.FlatFields, uniformBlock.FlatFieldCount, stride)) {
+					if (stride != b.InstanceStride) {
+						LOGW("Shader program {} - instance stride {} does not match the reflected {}, not batching it", _glHandle, stride, b.InstanceStride);
+						uniformBlock.FlatFieldCount = 0;
+					} else {
+						uniformBlock.FlatStride = stride;
+						for (std::uint32_t f = 0; f < uniformBlock.FlatFieldCount; f++) {
+							char name[48];
+							std::snprintf(name, sizeof(name), "instances_%s", uniformBlock.FlatFields[f].Name);
+							uniformBlock.FlatFields[f].Location = glGetUniformLocation(_glHandle, name);
+						}
+					}
+				} else {
+					uniformBlock.FlatFieldCount = 0;
+				}
+			}
+#endif
 
 			if (_introspection != Introspection::NoUniformsInBlocks) {
 				for (std::size_t j = 0; j < b.MemberCount; j++) {
@@ -627,8 +825,18 @@ namespace nCine::RHI::GL
 			// The ES2 quad-corner attribute is fed from a tightly-packed static VBO (a plain vec2 stream),
 			// not the geometry VBO; set its stride/offset once here (the VBO is bound in DefineVertexFormat).
 			if (std::strcmp(attribute.GetName(), Material::QuadCornerAttributeName) == 0) {
+#	if defined(WITH_AMIGA_OGLES2)
+				// Batched programs read corner + instance index from one interleaved stream (x, y, index)
+				_vertexFormat[location].SetVboParameters(GLsizei((HasInstanceIndexAttribute() ? 3 : 2) * sizeof(GLfloat)), nullptr);
+#	else
 				_vertexFormat[location].SetVboParameters(2 * sizeof(GLfloat), nullptr);
+#	endif
 			}
+#	if defined(WITH_AMIGA_OGLES2)
+			else if (std::strcmp(attribute.GetName(), Material::InstanceIndexAttributeName) == 0) {
+				_vertexFormat[location].SetVboParameters(3 * sizeof(GLfloat), reinterpret_cast<const GLvoid*>(2 * sizeof(GLfloat)));
+			}
+#	endif
 #endif
 		}
 	}

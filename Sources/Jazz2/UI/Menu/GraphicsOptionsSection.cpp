@@ -5,6 +5,9 @@
 #include "../../PreferencesCache.h"
 
 #include "../../../nCine/Application.h"
+#if defined(WITH_AMIGA_OGLES2)
+#	include "../../../nCine/Backends/Amiga/AmigaPlatform.h"
+#endif
 #include "../../../nCine/Base/FrameTimer.h"
 #include "../../../nCine/I18n.h"
 #include "../../../nCine/Graphics/RHI/RhiFwd.h"	// RHI_CAP_POSTPROCESSING (a header macro, not a build define)
@@ -56,7 +59,7 @@ namespace Jazz2::UI::Menu
 			list->Add<ChoiceItem>(_("Resolution"),
 				[this]() -> StringView {
 					Vector2i res = theApplication().GetGfxDevice().drawableResolution();
-#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_AMIGA) && (defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2))
 					// A size picked here only takes effect on the next start (see below), so say so
 					if (PreferencesCache::PreferredWidth > 0 && PreferencesCache::PreferredHeight > 0 &&
 						(PreferencesCache::PreferredWidth != res.X || PreferencesCache::PreferredHeight != res.Y)) {
@@ -72,7 +75,7 @@ namespace Jazz2::UI::Menu
 					const IGfxDevice::Monitor& monitor = device.monitor(0);
 					const std::int32_t count = monitor.numVideoModes;
 					Vector2i current = device.drawableResolution();
-#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_AMIGA) && (defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2))
 					if (PreferencesCache::PreferredWidth > 0 && PreferencesCache::PreferredHeight > 0) {
 						current = Vector2i(PreferencesCache::PreferredWidth, PreferencesCache::PreferredHeight);
 					}
@@ -97,7 +100,7 @@ namespace Jazz2::UI::Menu
 					// its window in place (SDL 1.2 with MiniGL) still opens at this size next time
 					PreferencesCache::PreferredWidth = std::int32_t(picked.width);
 					PreferencesCache::PreferredHeight = std::int32_t(picked.height);
-#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_AMIGA) && (defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2))
 					// No in-place change on Amiga/MiniGL: MiniGLV3D 29.1 resizes a live context badly (part of
 					// the pipeline stays at the old size - duplicated image, garbage). The size is saved and the
 					// window opens at it on the next start.
@@ -132,7 +135,7 @@ namespace Jazz2::UI::Menu
 				});
 		}
 #endif
-#if defined(WITH_AMIGA) && defined(WITH_RHI_LEGACYGL)
+#if defined(WITH_AMIGA) && (defined(WITH_RHI_LEGACYGL) || defined(WITH_AMIGA_OGLES2))
 		// Amiga (MiniGL): no in-place switch - the screen is opened once at startup, see AmigaGfxDevice.
 		// The choice is saved and takes effect the next time the game starts.
 		// TRANSLATORS: Menu item in Options > Graphics section
@@ -145,6 +148,21 @@ namespace Jazz2::UI::Menu
 			},
 			[this](std::int32_t) {
 				PreferencesCache::EnableFullscreen = !PreferencesCache::EnableFullscreen;
+				_isDirty = true;
+			});
+#endif
+#if defined(WITH_AMIGA_OGLES2)
+		// ogles2 switches the vertical-blank wait of a live context, so this applies at once. With VSync a
+		// frame that misses one refresh waits for the next (60 -> 30 FPS); without it the rate falls smoothly
+		// but scrolling can tear.
+		// TRANSLATORS: Menu item in Options > Graphics section
+		list->Add<ChoiceItem>(_("VSync"),
+			[]() -> StringView { return (PreferencesCache::MaxFps == PreferencesCache::UseVsync ? _("Enabled") : _("Disabled")); },
+			[this](std::int32_t) {
+				const bool enable = (PreferencesCache::MaxFps != PreferencesCache::UseVsync);
+				PreferencesCache::MaxFps = (enable ? PreferencesCache::UseVsync : PreferencesCache::UnlimitedFps);
+				nCine::Backends::AmigaPlatform::ApplyVSync(enable);
+				nCine::Backends::AmigaPlatform::SaveVSyncPreference(enable);
 				_isDirty = true;
 			});
 #endif

@@ -12,6 +12,10 @@
 #			include <GLES2/gl2.h>
 #			include <GLES2/gl2ext.h>
 #			include "Graphics/RHI/GL/GLEs2HeaderShims.h"
+#			if defined(WITH_AMIGA_OGLES2)
+				// Classic Amiga: every gl* name becomes an inline through ogles2.library's dispatch table
+#				include <proto/ogles2.h>
+#			endif
 #		else
 #			include <GLES3/gl3.h>
 #			include <GLES2/gl2ext.h>

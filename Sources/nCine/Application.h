@@ -56,7 +56,7 @@ namespace nCine
 		struct RenderingSettings
 		{
 			RenderingSettings()
-#if defined(RHI_GL_PROFILE_ES2)
+#if defined(RHI_GL_PROFILE_ES2) && !defined(WITH_AMIGA_OGLES2)
 				// The OpenGL|ES 2.0 profile has no uniform buffer objects: per-instance data is uploaded as
 				// plain uniforms per draw, so CPU sprite batching (which aggregates instances into a single
 				// InstancesBlock UBO indexed by gl_VertexID) is disabled and every sprite draws individually
@@ -66,7 +66,10 @@ namespace nCine
 				: batchingEnabled(true),
 #endif
 				  batchingWithIndices(false), cullingEnabled(true), minBatchSize(4),
-#if defined(WITH_RHI_RSX)
+#if defined(WITH_AMIGA_OGLES2)
+				  // ogles2: the flattened instance arrays are sized for a few dozen sprites (see GLRhiCapabilities)
+				  maxBatchSize(32)
+#elif defined(WITH_RHI_RSX)
 				  // The PlayStation 3's batched shaders reach their instance array through the RSX's constant
 				  // registers rather than a uniform buffer, so the batch is bounded by what fits there and by
 				  // what the backend's batched corner stream covers - a far smaller number than the 585 a

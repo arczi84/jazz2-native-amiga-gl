@@ -146,6 +146,12 @@ namespace nCine::RHI::GL
 		 * Mutable so that `const` texture objects can still be bound to a texture unit.
 		 */
 		mutable std::uint32_t _textureUnit;
+#if defined(RHI_GL_PROFILE_ES2) && defined(DEATH_TARGET_BIG_ENDIAN)
+		/** @brief Reverse the bytes of every RGBA8 texel on upload - ES2 stand-in for the (A,B,G,R) swizzle */
+		bool _reverseRgba = false;
+
+		const void* ReverseRgbaIfNeeded(PixelFormat format, bool bgr, std::int32_t width, std::int32_t height, const void* data);
+#endif
 
 		static bool BindHandle(GLenum target, GLuint glHandle, std::uint32_t textureUnit);
 		static bool BindHandle(GLenum target, GLuint glHandle) {

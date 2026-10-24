@@ -4,6 +4,8 @@
 #include "../Base/Algorithms.h"
 #include "../../Main.h"
 
+#include <cstdlib>
+
 namespace nCine
 {
 	RenderVaoPool::RenderVaoPool(std::uint32_t vaoPoolSize)
@@ -23,7 +25,15 @@ namespace nCine
 
 		// The fingerprint rejects mismatches with a single comparison, the deep format
 		// comparison only runs on a fingerprint match to rule out hash collisions
+#if defined(WITH_AMIGA_OGLES2)
+		// The pool holds a single emulated VAO here (AppConfiguration::vaoPoolSize), so the fingerprint cannot
+		// pick between entries - and its 64-bit hashing is a libgcc call per multiply on a 68k. Compare directly.
+		// NCINE_NOOPT: the original fingerprint, for A/B measurements
+		static const bool noOpt = (std::getenv("NCINE_NOOPT") != nullptr);
+		const std::uint64_t fingerprint = (noOpt ? vertexFormat.CalculateFingerprint() : 0);
+#else
 		const std::uint64_t fingerprint = vertexFormat.CalculateFingerprint();
+#endif
 
 		bool vaoFound = false;
 		for (VaoBinding& binding : _vaoPool) {

@@ -98,6 +98,12 @@ namespace nCine
 		static inline RHI::Buffer* GetQuadCornerVbo() {
 			return _quadCornerVbo.get();
 		}
+#if defined(WITH_AMIGA_OGLES2)
+		/** @brief Static (corner x, corner y, instance index) stream of the batched ES2 sprite programs */
+		static inline RHI::Buffer* GetBatchedQuadCornerVbo() {
+			return _batchedQuadCornerVbo.get();
+		}
+#endif
 #endif
 
 		static RHI::ShaderProgram* GetShaderProgram(Material::ShaderProgramType shaderProgramType);
@@ -131,6 +137,9 @@ namespace nCine
 
 #if defined(RHI_GL_PROFILE_ES2)
 		// Static 4-corner (TRIANGLE_STRIP order) VBO for the single-quad ES2 sprite/full-screen path
+		#if defined(WITH_AMIGA_OGLES2)
+		static std::unique_ptr<RHI::Buffer> _batchedQuadCornerVbo;
+#endif
 		static std::unique_ptr<RHI::Buffer> _quadCornerVbo;
 #endif
 

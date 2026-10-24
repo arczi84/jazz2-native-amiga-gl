@@ -4,6 +4,7 @@
 #include "../Main.h"
 
 #include <IO/FileSystem.h>
+#include <ctime>
 
 #if (defined(WITH_SDL2) || defined(WITH_SDL3))
 #	include "Backends/SdlGfxDevice.h"
@@ -486,6 +487,23 @@ namespace nCine
 				LOGI("Ctrl-C received - quitting");
 				app.Quit();
 			}
+#		if defined(WITH_AMIGA_OGLES2) || defined(WITH_RHI_LEGACYGL)
+			// NCINE_QUITAFTER=<seconds>: quit through the normal path, to test the exit sequence
+			{
+				static std::int32_t quitAfter = -1;
+				static std::clock_t quitStart;
+				if (quitAfter < 0) {
+					const char* value = ::getenv("NCINE_QUITAFTER");
+					quitAfter = (value != nullptr ? std::atoi(value) : 0);
+					quitStart = std::clock();
+				}
+				if (quitAfter > 0 && std::clock() - quitStart >= std::clock_t(quitAfter) * CLOCKS_PER_SEC) {
+					LOGI("NCINE_QUITAFTER reached - quitting");
+					quitAfter = 0;
+					app.Quit();
+				}
+			}
+#		endif
 #	endif
 		}
 #endif

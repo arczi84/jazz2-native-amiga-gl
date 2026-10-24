@@ -1428,6 +1428,17 @@ namespace nCine
 		// would be exactly the one that named the crash. On MorphOS the shell redirects this to DEBUG:,
 		// which the emulator writes to its serial log.
 		::write(STDOUT_FILENO, logEntryWithColors, length2);
+#	if defined(WITH_AMIGA_OGLES2) || defined(WITH_RHI_LEGACYGL)
+		// NCINE_LOGFILE: also append every line to a file that is closed after each write, so it can
+		// be read while the game runs (or hangs) - a shell redirect stays exclusively locked
+		static const char* stepLogFile = ::getenv("NCINE_LOGFILE");
+		if (stepLogFile != nullptr) {
+			if (FILE* f = ::fopen(stepLogFile, "a")) {
+				::fwrite(logEntryWithColors, 1, length2, f);
+				::fclose(f);
+			}
+		}
+#	endif
 #elif defined(DEATH_TARGET_DREAMCAST)
 		// Write the message to dbgio (SCIF serial by default) - the Flycast/lxdream emulators show it
 		// in their logs and dc-tool/dcload shows it in the console

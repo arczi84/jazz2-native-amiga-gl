@@ -221,6 +221,17 @@ namespace nCine::RHI::GL
 		inline std::uint32_t GetAttributeCount() const {
 			return _attributeLocations.size();
 		}
+#if defined(WITH_AMIGA_OGLES2)
+		/** @brief Whether this is a batched sprite program reading the instance index stream (ES2) */
+		inline bool HasInstanceIndexAttribute() const {
+			for (std::uint32_t i = 0; i < _attributes.size(); i++) {
+				if (std::strcmp(_attributes[i].GetName(), "aInstanceIndex") == 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+#endif
 		/** @brief Returns `true` if the program has an active vertex attribute with the given name */
 		inline bool HasAttribute(const char* name) const {
 			return (_attributeLocations.find(String::nullTerminatedView(name)) != nullptr);

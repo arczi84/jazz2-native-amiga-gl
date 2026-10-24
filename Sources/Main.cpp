@@ -477,7 +477,7 @@ void GameEventHandler::OnInitialize()
 				}
 			}
 		}
-#		if defined(DEATH_DEBUG)
+#		if defined(DEATH_DEBUG) || defined(WITH_AMIGA_OGLES2)
 		if (arg == "/level"_s && i + 1 < config.argc()) {
 			String levelName = config.argv(i + 1);
 			StringUtils::lowercaseInPlace(levelName);

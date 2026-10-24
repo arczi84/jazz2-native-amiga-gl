@@ -1,4 +1,7 @@
 #include "GLShader.h"
+
+#include <cstdlib>
+#include <cstring>
 #include "GLDebug.h"
 #include "../../RenderResources.h"
 #include "../../../Application.h"
@@ -105,6 +108,21 @@ namespace nCine::RHI::GL
 		}
 
 		std::size_t count = sourceStrings.size();
+#if defined(WITH_AMIGA_OGLES2)
+		// NCINE_DUMPSHADERS: keep the concatenated text, which is what ogles2 hashes to name a program's binary
+		if (std::getenv("NCINE_DUMPSHADERS") != nullptr) {
+			std::size_t total = 0;
+			for (std::size_t i = 0; i < count; i++) {
+				total += std::size_t(sourceLengths[i]);
+			}
+			DumpSource = String{NoInit, total};
+			std::size_t offset = 0;
+			for (std::size_t i = 0; i < count; i++) {
+				std::memcpy(DumpSource.data() + offset, sourceStrings[i], std::size_t(sourceLengths[i]));
+				offset += std::size_t(sourceLengths[i]);
+			}
+		}
+#endif
 		glShaderSource(_glHandle, GLsizei(count), sourceStrings.data(), sourceLengths.data());
 		return (count > 1);
 	}

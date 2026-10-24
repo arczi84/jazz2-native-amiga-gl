@@ -1,5 +1,8 @@
 #if defined(WITH_AMIGA)
 
+#include <algorithm>
+#include <ctime>
+#include <cstdlib>
 #include "AmigaInputManager.h"
 
 #if defined(WITH_RHI_LEGACYGL)
@@ -559,6 +562,47 @@ namespace nCine::Backends
 	{
 		processIdcmpMessages();
 		pollJoyPorts();
+
+#if defined(WITH_AMIGA_OGLES2) || defined(WITH_RHI_LEGACYGL)
+		// NCINE_AUTOPLAY: a repeatable run for benchmarks - hold Right and Run, jump for 0.4 s every 2 s
+		// (the default key bindings), so every measurement scrolls through the same part of the level
+		{
+			static std::int32_t autoplay = -1;
+			static std::clock_t autoplayStart;
+			if (autoplay < 0) {
+				// The value is the delay in seconds before it starts (default 8): keys sent while the level is
+				// still loading reach a GameEventHandler without a current handler
+				const char* value = std::getenv("NCINE_AUTOPLAY");
+				autoplay = (value != nullptr ? std::max(std::atoi(value), 1) : 0);
+				if (autoplay == 1) {
+					autoplay = 8;
+				}
+				autoplayStart = std::clock();
+			}
+			const std::int32_t elapsedMs = std::int32_t((std::clock() - autoplayStart) * 1000 / CLOCKS_PER_SEC);
+			if (autoplay > 0 && _inputEventHandler != nullptr && elapsedMs >= autoplay * 1000) {
+				// The game tracks keys from the events (LevelHandler::OnKeyPressed), so send one on each change
+				const std::uint32_t ms = std::uint32_t(elapsedMs - autoplay * 1000);
+				const struct { Keys Key; bool Down; } wanted[] = {
+					{ Keys::Right, true }, { Keys::C, true }, { Keys::V, (ms % 2000) < 400 }
+				};
+				for (const auto& w : wanted) {
+					bool& down = _keyboardState._keys[std::int32_t(w.Key)];
+					if (down != w.Down) {
+						down = w.Down;
+						_keyboardEvent.scancode = 0;
+						_keyboardEvent.sym = w.Key;
+						_keyboardEvent.mod = 0;
+						if (w.Down) {
+							_inputEventHandler->OnKeyPressed(_keyboardEvent);
+						} else {
+							_inputEventHandler->OnKeyReleased(_keyboardEvent);
+						}
+					}
+				}
+			}
+		}
+#endif
 	}
 }
 

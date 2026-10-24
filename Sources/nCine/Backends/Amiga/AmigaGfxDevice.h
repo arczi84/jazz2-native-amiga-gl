@@ -80,6 +80,8 @@ static bool hasExactRtgMode(std::int32_t width, std::int32_t height);
 		bool _pixelFormatLogged;
 		/** @brief Whether the MiniGL window was opened as a fullscreen screen (chosen at startup only) */
 		bool _openedFullscreen = false;
+		/** @brief ogles2.library context (WITH_AMIGA_OGLES2 only) */
+		void* _glContext = nullptr;
 
 		friend class ::nCine::MainApplication;
 	};
